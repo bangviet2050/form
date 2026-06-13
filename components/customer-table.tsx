@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select } from '@/components/ui/select'
@@ -70,6 +71,7 @@ export function CustomerTable({
   const selectAllRef = useRef<HTMLInputElement>(null)
   const [inlineSuggestOpen, setInlineSuggestOpen] = useState(false)
   const [inlineHighlightIdx, setInlineHighlightIdx] = useState(-1)
+  const [suggestPos, setSuggestPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const userTypingRef = useRef(false)
   const ignoreBlurRef = useRef(false)
 
@@ -111,8 +113,59 @@ export function CustomerTable({
       if (inputRef.current instanceof HTMLInputElement) {
         inputRef.current.select()
       }
+      // Calculate position for fixed suggestion dropdown
+      const rect = inputRef.current.getBoundingClientRect()
+      setSuggestPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
     }
   }, [editingCell])
+
+  // Update suggestion position on scroll/resize
+  useEffect(() => {
+    if (!inlineSuggestOpen || !inputRef.current) return
+    const update = () => {
+      const rect = inputRef.current?.getBoundingClientRect()
+      if (rect) setSuggestPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+    }
+    update()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [inlineSuggestOpen])
+
+  // Fixed-position suggestion dropdown rendered via portal to body
+  const renderSuggestDropdown = (items: string[]) => {
+    if (!inlineSuggestOpen || items.length === 0 || !suggestPos) return null
+    return createPortal(
+      <div
+        style={{ position: 'fixed', top: suggestPos.top, left: suggestPos.left, width: suggestPos.width, zIndex: 9999 }}
+        className="flex flex-col max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+      >
+        {items.map((s, i) => (
+          <button
+            key={s}
+            type="button"
+            className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
+              i === inlineHighlightIdx ? 'bg-blue-100 text-blue-700' : 'hover:bg-blue-50 hover:text-blue-700'
+            }`}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              ignoreBlurRef.current = true
+              setInlineSuggestOpen(false)
+              setInlineHighlightIdx(-1)
+              saveEdit(s)
+            }}
+            onMouseEnter={() => setInlineHighlightIdx(i)}
+          >
+            {s}
+          </button>
+        ))}
+      </div>,
+      document.body
+    )
+  }
 
   const visibleSelectedCount = customers.filter((customer) => selectedIds.has(customer.id)).length
   const allVisibleSelected = customers.length > 0 && visibleSelectedCount === customers.length
@@ -224,6 +277,7 @@ export function CustomerTable({
     setEditValue('')
     setInlineSuggestOpen(false)
     setInlineHighlightIdx(-1)
+    setSuggestPos(null)
 
     const oldCustomers = customers
     const updatedCustomers = customers.map((c) => {
@@ -235,6 +289,7 @@ export function CustomerTable({
     try {
       await updateCustomer(id, data)
       toast.success('Đã cập nhật!')
+      onRefresh()
       onStatsRefresh()
     } catch (error) {
       onCustomersUpdate(oldCustomers)
@@ -247,6 +302,7 @@ export function CustomerTable({
     setEditValue('')
     setInlineSuggestOpen(false)
     setInlineHighlightIdx(-1)
+    setSuggestPos(null)
   }
 
   const handleReturnNow = async (customer: Customer) => {
@@ -261,6 +317,7 @@ export function CustomerTable({
     try {
       await updateCustomer(customer.id, { returnedDate: dateStr, status: 'returned' })
       toast.success('Đã trả máy!')
+      onRefresh()
       onStatsRefresh()
     } catch (error) {
       onCustomersUpdate(oldCustomers)
@@ -289,6 +346,7 @@ export function CustomerTable({
     try {
       await deleteCustomer(id)
       toast.success('Đã xóa khách hàng!')
+      onRefresh()
       onStatsRefresh()
     } catch (error: unknown) {
       onCustomersUpdate(oldCustomers)
@@ -313,6 +371,7 @@ export function CustomerTable({
     try {
       await Promise.all([...idsToDelete].map((id) => deleteCustomer(id)))
       toast.success(`Đã xóa ${count} khách hàng!`)
+      onRefresh()
       onStatsRefresh()
     } catch (error) {
       onCustomersUpdate(oldCustomers)
@@ -337,6 +396,7 @@ export function CustomerTable({
     try {
       await Promise.all([...idsToChange].map((id) => updateCustomer(id, { status })))
       toast.success('Đã đổi trạng thái!')
+      onRefresh()
       onStatsRefresh()
     } catch (error) {
       onCustomersUpdate(oldCustomers)
@@ -467,29 +527,7 @@ export function CustomerTable({
               className={inputClass}
               autoComplete="off"
             />
-            {inlineSuggestOpen && filteredSuggestions.length > 0 && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-1 flex flex-col max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-                {filteredSuggestions.map((s, i) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
-                      i === inlineHighlightIdx ? 'bg-blue-100 text-blue-700' : 'hover:bg-blue-50 hover:text-blue-700'
-                    }`}
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      ignoreBlurRef.current = true
-                      setInlineSuggestOpen(false)
-                      setInlineHighlightIdx(-1)
-                      saveEdit(s)
-                    }}
-                    onMouseEnter={() => setInlineHighlightIdx(i)}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
+            {renderSuggestDropdown(filteredSuggestions)}
           </div>
         )
       }
@@ -553,29 +591,7 @@ export function CustomerTable({
               className={inputClass}
               autoComplete="off"
             />
-            {inlineSuggestOpen && filteredSuggestions.length > 0 && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-1 flex flex-col max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-                {filteredSuggestions.map((s, i) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
-                      i === inlineHighlightIdx ? 'bg-blue-100 text-blue-700' : 'hover:bg-blue-50 hover:text-blue-700'
-                    }`}
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      ignoreBlurRef.current = true
-                      setInlineSuggestOpen(false)
-                      setInlineHighlightIdx(-1)
-                      saveEdit(s)
-                    }}
-                    onMouseEnter={() => setInlineHighlightIdx(i)}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
+            {renderSuggestDropdown(filteredSuggestions)}
           </div>
         )
       }
@@ -641,29 +657,7 @@ export function CustomerTable({
               className={inputClass}
               autoComplete="off"
             />
-            {inlineSuggestOpen && filteredSuggestions.length > 0 && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-1 flex flex-col max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-                {filteredSuggestions.map((s, i) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
-                      i === inlineHighlightIdx ? 'bg-blue-100 text-blue-700' : 'hover:bg-blue-50 hover:text-blue-700'
-                    }`}
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      ignoreBlurRef.current = true
-                      setInlineSuggestOpen(false)
-                      setInlineHighlightIdx(-1)
-                      saveEdit(s)
-                    }}
-                    onMouseEnter={() => setInlineHighlightIdx(i)}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
+            {renderSuggestDropdown(filteredSuggestions)}
           </div>
         )
       }

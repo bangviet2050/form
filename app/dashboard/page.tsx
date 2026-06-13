@@ -692,7 +692,7 @@ export default function DashboardPage() {
                 customers={filteredCustomers}
                 hasFilters={hasActiveFilters}
                 onEdit={handleEditCustomer}
-                onRefresh={() => loadData(currentPage, statusFilter, dateFrom, dateTo)}
+                onRefresh={() => silentRefresh()}
                 onCustomersUpdate={(updated) => {
                   setCustomers(updated)
                   setFilteredCustomers(updated)

@@ -70,10 +70,15 @@ export default async function PrintInvoicePage({ params }: PrintInvoicePageProps
     notFound()
   }
 
+  // Admin can print any customer's invoice; staff only their own
+  const whereCondition = session.user.role === 'admin'
+    ? eq(customers.id, customerId)
+    : and(eq(customers.id, customerId), eq(customers.userId, session.user.id))
+
   const result = await db
     .select()
     .from(customers)
-    .where(and(eq(customers.id, customerId), eq(customers.userId, session.user.id)))
+    .where(whereCondition)
     .limit(1)
 
   const customer = result[0]
@@ -151,8 +156,16 @@ export default async function PrintInvoicePage({ params }: PrintInvoicePageProps
 
   const labelStyle: CSSProperties = {
     fontWeight: 700,
+    width: '38%',
+    whiteSpace: 'normal',
+    wordBreak: 'break-word',
+  }
+
+  const narrowLabelStyle: CSSProperties = {
+    fontWeight: 700,
     width: '28%',
-    whiteSpace: 'nowrap',
+    whiteSpace: 'normal',
+    wordBreak: 'break-word',
   }
 
   const valueStyle: CSSProperties = {
@@ -286,17 +299,17 @@ export default async function PrintInvoicePage({ params }: PrintInvoicePageProps
           <table style={tableStyle} className="avoid-break">
             <tbody>
               <tr>
-                <td style={{ ...cellStyle, ...labelStyle }}>Mã phiếu</td>
+                <td style={{ ...cellStyle, ...narrowLabelStyle }}>Mã phiếu</td>
                 <td style={{ ...cellStyle, ...valueStyle }}>{customer.ticketId}</td>
-                <td style={{ ...cellStyle, ...labelStyle }}>Ngày nhận</td>
+                <td style={{ ...cellStyle, ...narrowLabelStyle }}>Ngày nhận</td>
                 <td style={{ ...cellStyle, ...valueStyle }}>
                   {formatVietnamDateTime(customer.receivedDate)}
                 </td>
               </tr>
               <tr>
-                <td style={{ ...cellStyle, ...labelStyle }}>Tên khách hàng</td>
+                <td style={{ ...cellStyle, ...narrowLabelStyle }}>Tên khách hàng</td>
                 <td style={{ ...cellStyle, ...valueStyle }}>{customer.customerName}</td>
-                <td style={{ ...cellStyle, ...labelStyle }}>SĐT</td>
+                <td style={{ ...cellStyle, ...narrowLabelStyle }}>SĐT</td>
                 <td style={{ ...cellStyle, ...valueStyle }}>{customer.phone}</td>
               </tr>
             </tbody>
@@ -328,11 +341,11 @@ export default async function PrintInvoicePage({ params }: PrintInvoicePageProps
               <table style={tableStyle}>
                 <tbody>
                   <tr>
-                    <td style={{ ...cellStyle, ...labelStyle }}>Tình trạng trước sửa</td>
+                    <td style={{ ...cellStyle, ...labelStyle }}>Trước khi sửa</td>
                     <td style={{ ...cellStyle, ...valueStyle }}>{customer.conditionBefore || '-'}</td>
                   </tr>
                   <tr>
-                    <td style={{ ...cellStyle, ...labelStyle }}>Tình trạng sau sửa</td>
+                    <td style={{ ...cellStyle, ...labelStyle }}>Sau khi sửa</td>
                     <td style={{ ...cellStyle, ...valueStyle }}>{customer.conditionAfter || '-'}</td>
                   </tr>
                   <tr>

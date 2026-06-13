@@ -319,31 +319,6 @@ export async function exportOrdersExcel(
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('Đơn hàng')
 
-  sheet.columns = [
-    { header: 'Mã phiếu', key: 'ticketId', width: 12 },
-    { header: 'Khách hàng', key: 'customerName', width: 20 },
-    { header: 'SĐT', key: 'phone', width: 14 },
-    { header: 'Ngày nhận', key: 'receivedDate', width: 14 },
-    { header: 'Thiết bị', key: 'deviceType', width: 16 },
-    { header: 'Model', key: 'deviceModel', width: 16 },
-    { header: 'Phụ kiện', key: 'accessories', width: 20 },
-    { header: 'Tình trạng trước', key: 'conditionBefore', width: 20 },
-    { header: 'Tình trạng sau', key: 'conditionAfter', width: 20 },
-    { header: 'Người nhận', key: 'receivedBy', width: 14 },
-    { header: 'Người sửa', key: 'repairedBy', width: 14 },
-    { header: 'Giá sửa', key: 'repairCost', width: 14 },
-    { header: 'Trạng thái', key: 'status', width: 12 },
-    { header: 'Ngày trả', key: 'returnedDate', width: 14 },
-    { header: 'Ghi chú', key: 'notes', width: 24 },
-    { header: 'Nhân viên', key: 'staffName', width: 16 },
-  ]
-
-  // Style header
-  sheet.getRow(1).font = { bold: true, size: 11 }
-  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
-  sheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
-  sheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' }
-
   const statusMap: Record<string, string> = {
     pending: 'Chờ sửa',
     repairing: 'Đang sửa',
@@ -351,15 +326,152 @@ export async function exportOrdersExcel(
     returned: 'Đã trả',
   }
 
-  for (const row of data as any[]) {
-    sheet.addRow({
-      ...row,
-      receivedDate: row.receivedDate ? new Date(row.receivedDate).toLocaleDateString('vi-VN') : '',
-      returnedDate: row.returnedDate ? new Date(row.returnedDate).toLocaleDateString('vi-VN') : '',
-      repairCost: row.repairCost ? Number(row.repairCost) : 0,
-      status: statusMap[row.status] || row.status,
-    })
+  // Column definitions (no header - we add it manually)
+  sheet.columns = [
+    { key: 'stt', width: 6 },
+    { key: 'ticketId', width: 12 },
+    { key: 'customerName', width: 20 },
+    { key: 'phone', width: 14 },
+    { key: 'receivedDate', width: 14 },
+    { key: 'deviceType', width: 14 },
+    { key: 'deviceModel', width: 16 },
+    { key: 'accessories', width: 18 },
+    { key: 'conditionBefore', width: 18 },
+    { key: 'conditionAfter', width: 18 },
+    { key: 'receivedBy', width: 14 },
+    { key: 'repairedBy', width: 14 },
+    { key: 'repairCost', width: 16 },
+    { key: 'status', width: 12 },
+    { key: 'returnedDate', width: 14 },
+    { key: 'notes', width: 24 },
+  ]
+
+  // Title row (row 1)
+  const titleRow = sheet.addRow(['DANH SÁCH ĐƠN HÀNG'])
+  titleRow.font = { bold: true, size: 16, color: { argb: 'FF1F4E79' } }
+  titleRow.alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.mergeCells('A1:P1')
+  titleRow.height = 32
+
+  // Subtitle row (row 2)
+  const subtitleRow = sheet.addRow([
+    `Xuất lúc: ${new Date().toLocaleString('vi-VN')}${status ? ` | Trạng thái: ${statusMap[status] || status}` : ''}${dateFrom ? ` | Từ: ${dateFrom}` : ''}${dateTo ? ` | Đến: ${dateTo}` : ''}`
+  ])
+  subtitleRow.font = { italic: true, size: 10, color: { argb: 'FF666666' } }
+  subtitleRow.alignment = { horizontal: 'center' }
+  sheet.mergeCells('A2:P2')
+
+  // Blank row (row 3)
+  sheet.addRow([])
+
+  // Header row (row 4)
+  const headerRow = sheet.addRow([
+    'STT', 'Mã phiếu', 'Khách hàng', 'SĐT', 'Ngày nhận',
+    'Thiết bị', 'Model', 'Phụ kiện', 'Trước khi sửa', 'Sau khi sửa',
+    'Người nhận', 'Người sửa', 'Giá sửa (đ)', 'Trạng thái', 'Ngày trả', 'Ghi chú'
+  ])
+  headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
+  headerRow.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+  headerRow.border = {
+    top: { style: 'thin', color: { argb: 'FF000000' } },
+    bottom: { style: 'thin', color: { argb: 'FF000000' } },
+    left: { style: 'thin', color: { argb: 'FF000000' } },
+    right: { style: 'thin', color: { argb: 'FF000000' } },
   }
+  headerRow.height = 24
+
+  const statusColors: Record<string, string> = {
+    'Chờ sửa': 'FFFFF3CD',
+    'Đang sửa': 'FFE2D9F3',
+    'Đã xong': 'FFD4EDDA',
+    'Đã trả': 'FFD1ECF8',
+  }
+
+  let rowIndex = 0
+  for (const row of data as any[]) {
+    rowIndex++
+    const newRow = sheet.addRow([
+      rowIndex,
+      row.ticketId,
+      row.customerName,
+      row.phone,
+      row.receivedDate ? new Date(row.receivedDate).toLocaleDateString('vi-VN') : '',
+      row.deviceType,
+      row.deviceModel || '',
+      row.accessories || '',
+      row.conditionBefore || '',
+      row.conditionAfter || '',
+      row.receivedBy || '',
+      row.repairedBy || '',
+      row.repairCost ? Number(row.repairCost) : 0,
+      statusMap[row.status] || row.status,
+      row.returnedDate ? new Date(row.returnedDate).toLocaleDateString('vi-VN') : '',
+      row.notes || '',
+    ])
+
+    // Alternating row colors
+    const bgColor = rowIndex % 2 === 0 ? 'FFF8F9FA' : 'FFFFFFFF'
+    newRow.eachCell((cell: any) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } }
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        right: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+      }
+      cell.alignment = { vertical: 'middle', wrapText: true }
+    })
+
+    // Status cell color
+    const statusLabel = statusMap[row.status] || row.status
+    const statusColor = statusColors[statusLabel]
+    if (statusColor) {
+      const statusCell = newRow.getCell(14) // column N = Trạng thái
+      statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: statusColor } }
+      statusCell.font = { bold: true }
+      statusCell.alignment = { horizontal: 'center', vertical: 'middle' }
+    }
+
+    // Cost cell format (column M = 13)
+    const costCell = newRow.getCell(13)
+    costCell.numFmt = '#,##0'
+    costCell.alignment = { horizontal: 'right', vertical: 'middle' }
+
+    // STT center (column A)
+    newRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+    // Ticket center (column B)
+    newRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }
+    // Date center (columns E, O)
+    newRow.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' }
+    newRow.getCell(15).alignment = { horizontal: 'center', vertical: 'middle' }
+  }
+
+  // Total row
+  const totalRow = sheet.addRow([
+    '', '', '', '', '', '', '', '', '', '', '', '',
+    { formula: `SUM(M5:M${sheet.rowCount})`, result: undefined as any },
+    `${rowIndex} đơn`, '', '',
+  ])
+  totalRow.font = { bold: true, size: 11, color: { argb: 'FF1F4E79' } }
+  totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF4' } }
+  totalRow.eachCell((cell: any) => {
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF1F4E79' } },
+      bottom: { style: 'medium', color: { argb: 'FF1F4E79' } },
+      left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+      right: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+    }
+  })
+  const totalCostCell = totalRow.getCell(13)
+  totalCostCell.numFmt = '#,##0'
+  totalCostCell.alignment = { horizontal: 'right', vertical: 'middle' }
+
+  // Freeze header
+  sheet.views = [{ state: 'frozen', ySplit: 4, xSplit: 0 }]
+
+  // Auto-filter
+  sheet.autoFilter = { from: 'A4', to: 'P4' }
 
   const buffer = await workbook.xlsx.writeBuffer()
   return Buffer.from(buffer).toString('base64')
@@ -377,35 +489,111 @@ export async function exportRevenueExcel(year?: number) {
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('Doanh thu theo tháng')
 
+  // Column definitions (no header - we add it manually)
   sheet.columns = [
-    { header: 'Tháng', key: 'monthLabel', width: 14 },
-    { header: 'Số đơn', key: 'totalOrders', width: 12 },
-    { header: 'Đơn hoàn thành', key: 'completedOrders', width: 16 },
-    { header: 'Doanh thu (đ)', key: 'revenue', width: 18 },
+    { key: 'monthLabel', width: 16 },
+    { key: 'totalOrders', width: 14 },
+    { key: 'completedOrders', width: 18 },
+    { key: 'revenue', width: 20 },
   ]
 
-  sheet.getRow(1).font = { bold: true, size: 11 }
-  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
-  sheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
-  sheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' }
+  // Title row (row 1)
+  const titleRow = sheet.addRow([`BÁO CÁO DOANH THU NĂM ${year || new Date().getFullYear()}`])
+  titleRow.font = { bold: true, size: 16, color: { argb: 'FF1F4E79' } }
+  titleRow.alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.mergeCells('A1:D1')
+  titleRow.height = 32
 
+  // Subtitle row (row 2)
+  const subtitleRow = sheet.addRow([`Xuất lúc: ${new Date().toLocaleString('vi-VN')}`])
+  subtitleRow.font = { italic: true, size: 10, color: { argb: 'FF666666' } }
+  subtitleRow.alignment = { horizontal: 'center' }
+  sheet.mergeCells('A2:D2')
+
+  // Blank row (row 3)
+  sheet.addRow([])
+
+  // Header row (row 4)
+  const headerRow = sheet.addRow(['Tháng', 'Số đơn', 'Đơn hoàn thành', 'Doanh thu (đ)'])
+  headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
+  headerRow.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+  headerRow.border = {
+    top: { style: 'thin', color: { argb: 'FF000000' } },
+    bottom: { style: 'thin', color: { argb: 'FF000000' } },
+    left: { style: 'thin', color: { argb: 'FF000000' } },
+    right: { style: 'thin', color: { argb: 'FF000000' } },
+  }
+  headerRow.height = 24
+
+  let rowIndex = 0
   for (const row of revenueData) {
-    sheet.addRow({
-      monthLabel: row.monthLabel,
-      totalOrders: row.totalOrders,
-      completedOrders: row.completedOrders,
-      revenue: row.revenue,
+    rowIndex++
+    const newRow = sheet.addRow([
+      row.monthLabel,
+      row.totalOrders,
+      row.completedOrders,
+      row.revenue,
+    ])
+
+    // Alternating row colors
+    const bgColor = rowIndex % 2 === 0 ? 'FFF8F9FA' : 'FFFFFFFF'
+    newRow.eachCell((cell: any) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } }
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        right: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+      }
+      cell.alignment = { vertical: 'middle' }
     })
+
+    // Center month label
+    newRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+    newRow.getCell(1).font = { bold: true }
+
+    // Number format
+    newRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }
+    newRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }
+    newRow.getCell(4).numFmt = '#,##0'
+    newRow.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' }
+
+    // Highlight months with revenue
+    if (row.revenue > 0) {
+      newRow.getCell(4).font = { bold: true, color: { argb: 'FF1B7A3D' } }
+    }
   }
 
   // Total row
-  const totalRow = sheet.addRow({
-    monthLabel: 'TỔNG',
-    totalOrders: revenueData.reduce((s, r) => s + r.totalOrders, 0),
-    completedOrders: revenueData.reduce((s, r) => s + r.completedOrders, 0),
-    revenue: revenueData.reduce((s, r) => s + r.revenue, 0),
+  const totalRow = sheet.addRow([
+    'TỔNG CỘNG',
+    revenueData.reduce((s: number, r: any) => s + r.totalOrders, 0),
+    revenueData.reduce((s: number, r: any) => s + r.completedOrders, 0),
+    revenueData.reduce((s: number, r: any) => s + r.revenue, 0),
+  ])
+  totalRow.font = { bold: true, size: 11, color: { argb: 'FF1F4E79' } }
+  totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF4' } }
+  totalRow.eachCell((cell: any) => {
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF1F4E79' } },
+      bottom: { style: 'medium', color: { argb: 'FF1F4E79' } },
+      left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+      right: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+    }
   })
-  totalRow.font = { bold: true }
+  totalRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+  totalRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }
+  totalRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }
+  totalRow.getCell(4).numFmt = '#,##0'
+  totalRow.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' }
+  totalRow.getCell(4).font = { bold: true, size: 12, color: { argb: 'FF1F4E79' } }
+
+  // Freeze header
+  sheet.views = [{ state: 'frozen', ySplit: 4, xSplit: 0 }]
+
+  // Auto-filter
+  sheet.autoFilter = { from: 'A4', to: 'D4' }
 
   const buffer = await workbook.xlsx.writeBuffer()
   return Buffer.from(buffer).toString('base64')
@@ -423,24 +611,149 @@ export async function exportStaffPerformanceExcel() {
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('Hiệu suất nhân viên')
 
+  // Column definitions (no header - we add it manually)
   sheet.columns = [
-    { header: 'Nhân viên', key: 'staffName', width: 20 },
-    { header: 'Tổng đơn', key: 'totalOrders', width: 12 },
-    { header: 'Chờ sửa', key: 'pending', width: 12 },
-    { header: 'Đang sửa', key: 'repairing', width: 12 },
-    { header: 'Đã xong', key: 'completed', width: 12 },
-    { header: 'Đã trả', key: 'returned', width: 12 },
-    { header: 'Doanh thu (đ)', key: 'revenue', width: 18 },
+    { key: 'stt', width: 6 },
+    { key: 'staffName', width: 22 },
+    { key: 'totalOrders', width: 12 },
+    { key: 'pending', width: 12 },
+    { key: 'repairing', width: 12 },
+    { key: 'completed', width: 12 },
+    { key: 'returned', width: 12 },
+    { key: 'revenue', width: 20 },
   ]
 
-  sheet.getRow(1).font = { bold: true, size: 11 }
-  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
-  sheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
-  sheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' }
+  // Title row (row 1)
+  const titleRow = sheet.addRow(['BÁO CÁO HIỆU SUẤT NHÂN VIÊN'])
+  titleRow.font = { bold: true, size: 16, color: { argb: 'FF1F4E79' } }
+  titleRow.alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.mergeCells('A1:H1')
+  titleRow.height = 32
 
-  for (const row of staffData) {
-    sheet.addRow(row)
+  // Subtitle row (row 2)
+  const subtitleRow = sheet.addRow([`Xuất lúc: ${new Date().toLocaleString('vi-VN')}`])
+  subtitleRow.font = { italic: true, size: 10, color: { argb: 'FF666666' } }
+  subtitleRow.alignment = { horizontal: 'center' }
+  sheet.mergeCells('A2:H2')
+
+  // Blank row (row 3)
+  sheet.addRow([])
+
+  // Header row (row 4)
+  const headerRow = sheet.addRow([
+    'STT', 'Nhân viên', 'Tổng đơn', 'Chờ sửa', 'Đang sửa', 'Đã xong', 'Đã trả', 'Doanh thu (đ)'
+  ])
+  headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
+  headerRow.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+  headerRow.border = {
+    top: { style: 'thin', color: { argb: 'FF000000' } },
+    bottom: { style: 'thin', color: { argb: 'FF000000' } },
+    left: { style: 'thin', color: { argb: 'FF000000' } },
+    right: { style: 'thin', color: { argb: 'FF000000' } },
   }
+  headerRow.height = 24
+
+  // Status column colors
+  const statusColColors: Record<string, string> = {
+    pending: 'FFFFF3CD',
+    repairing: 'FFE2D9F3',
+    completed: 'FFD4EDDA',
+    returned: 'FFD1ECF8',
+  }
+
+  let rowIndex = 0
+  for (const row of staffData) {
+    rowIndex++
+    const newRow = sheet.addRow([
+      rowIndex,
+      (row as any).staffName,
+      (row as any).totalOrders,
+      (row as any).pending,
+      (row as any).repairing,
+      (row as any).completed,
+      (row as any).returned,
+      (row as any).revenue,
+    ])
+
+    // Alternating row colors
+    const bgColor = rowIndex % 2 === 0 ? 'FFF8F9FA' : 'FFFFFFFF'
+    newRow.eachCell((cell: any) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } }
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        right: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+      }
+      cell.alignment = { vertical: 'middle' }
+    })
+
+    // STT center (col 1)
+    newRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+    // Staff name bold (col 2)
+    newRow.getCell(2).font = { bold: true }
+    // Total orders center (col 3)
+    newRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }
+    newRow.getCell(3).font = { bold: true }
+
+    // Status columns with color (cols 4-7)
+    const statusKeys = ['pending', 'repairing', 'completed', 'returned']
+    for (let i = 0; i < statusKeys.length; i++) {
+      const colNum = 4 + i
+      const cell = newRow.getCell(colNum)
+      cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      const val = cell.value as number
+      if (val > 0) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: statusColColors[statusKeys[i]] } }
+        cell.font = { bold: true }
+      }
+    }
+
+    // Revenue format (col 8)
+    newRow.getCell(8).numFmt = '#,##0'
+    newRow.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' }
+    if ((row as any).revenue > 0) {
+      newRow.getCell(8).font = { bold: true, color: { argb: 'FF1B7A3D' } }
+    }
+  }
+
+  // Total row
+  const totalRow = sheet.addRow([
+    '',
+    'TỔNG CỘNG',
+    staffData.reduce((s: number, r: any) => s + r.totalOrders, 0),
+    staffData.reduce((s: number, r: any) => s + r.pending, 0),
+    staffData.reduce((s: number, r: any) => s + r.repairing, 0),
+    staffData.reduce((s: number, r: any) => s + r.completed, 0),
+    staffData.reduce((s: number, r: any) => s + r.returned, 0),
+    staffData.reduce((s: number, r: any) => s + r.revenue, 0),
+  ])
+  totalRow.font = { bold: true, size: 11, color: { argb: 'FF1F4E79' } }
+  totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF4' } }
+  totalRow.eachCell((cell: any) => {
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF1F4E79' } },
+      bottom: { style: 'medium', color: { argb: 'FF1F4E79' } },
+      left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+      right: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+    }
+  })
+  totalRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }
+  totalRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }
+  totalRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' }
+  totalRow.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' }
+  totalRow.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' }
+  totalRow.getCell(7).alignment = { horizontal: 'center', vertical: 'middle' }
+  totalRow.getCell(8).numFmt = '#,##0'
+  totalRow.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' }
+  totalRow.getCell(8).font = { bold: true, size: 12, color: { argb: 'FF1F4E79' } }
+
+  // Freeze header
+  sheet.views = [{ state: 'frozen', ySplit: 4, xSplit: 0 }]
+
+  // Auto-filter
+  sheet.autoFilter = { from: 'A4', to: 'H4' }
 
   const buffer = await workbook.xlsx.writeBuffer()
   return Buffer.from(buffer).toString('base64')
