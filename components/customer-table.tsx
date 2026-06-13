@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select } from '@/components/ui/select'
 import {
@@ -65,8 +66,9 @@ export function CustomerTable({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [pageInput, setPageInput] = useState('')
   const [historyCustomer, setHistoryCustomer] = useState<{ name: string; phone: string } | null>(null)
-  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; onConfirm: () => void }>({ open: false, title: '', description: '', onConfirm: () => {} })
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: React.ReactNode; onConfirm: () => void }>({ open: false, title: '', description: '', onConfirm: () => {} })
   const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null)
   const selectAllRef = useRef<HTMLInputElement>(null)
   const [inlineSuggestOpen, setInlineSuggestOpen] = useState(false)
@@ -119,6 +121,10 @@ export function CustomerTable({
     }
   }, [editingCell])
 
+  useEffect(() => {
+    setPageInput('')
+  }, [page])
+
   // Update suggestion position on scroll/resize
   useEffect(() => {
     if (!inlineSuggestOpen || !inputRef.current) return
@@ -167,7 +173,8 @@ export function CustomerTable({
     )
   }
 
-  const visibleSelectedCount = customers.filter((customer) => selectedIds.has(customer.id)).length
+  const selectedCustomers = customers.filter((customer) => selectedIds.has(customer.id))
+  const visibleSelectedCount = selectedCustomers.length
   const allVisibleSelected = customers.length > 0 && visibleSelectedCount === customers.length
   const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected
 
@@ -387,14 +394,24 @@ export function CustomerTable({
     setBulkActionLoading(true)
     const oldCustomers = customers
     const idsToChange = new Set(selectedIds)
+    const now = new Date()
+    const returnedDate = toVietnamDate(now)
+    const returnedTime = toVietnamTime(now)
+
+    const updates = status === 'returned'
+      ? { status, returnedDate: new Date(`${returnedDate}T${returnedTime}:00+07:00`) }
+      : { status }
 
     onCustomersUpdate(customers.map((c) =>
-      idsToChange.has(c.id) ? { ...c, status } : c
+      idsToChange.has(c.id) ? { ...c, ...updates } as Customer : c
     ))
     clearSelection()
 
     try {
-      await Promise.all([...idsToChange].map((id) => updateCustomer(id, { status })))
+      await Promise.all([...idsToChange].map((id) => updateCustomer(id, status === 'returned'
+        ? { status, returnedDate, returnedTime }
+        : { status }
+      )))
       toast.success('Đã đổi trạng thái!')
       onRefresh()
       onStatsRefresh()
@@ -430,6 +447,14 @@ export function CustomerTable({
     }
   }
 
+  const handleGoToPage = () => {
+    const nextPage = Number(pageInput)
+    if (!Number.isInteger(nextPage) || nextPage < 1 || nextPage > totalPages) {
+      return
+    }
+    onPageChange(nextPage)
+  }
+
   const renderCell = (customer: Customer, field: string, displayContent: React.ReactNode) => {
     const isEditing = editingCell?.id === customer.id && editingCell?.field === field
 
@@ -448,7 +473,7 @@ export function CustomerTable({
           >
             <option value="pending">Chờ sửa</option>
             <option value="repairing">Đang sửa</option>
-            <option value="completed">Xong</option>
+            <option value="completed">Đã xong</option>
             <option value="returned">Đã trả máy</option>
           </select>
         )
@@ -715,10 +740,12 @@ export function CustomerTable({
 
   if (customers.length === 0) {
     return (
-      <div className="text-center py-12">
+      <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-6 py-12 text-center">
         <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-        <p className="text-gray-400 text-sm">
-          {hasFilters ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có đơn hàng nào'}
+        <p className="text-sm font-medium text-gray-700">
+          {hasFilters
+            ? 'Không tìm thấy kết quả. Thử bỏ bộ lọc hoặc thay đổi từ khóa tìm kiếm.'
+            : 'Chưa có đơn hàng nào. Nhấn "Thêm khách hàng" để tạo đơn hàng đầu tiên.'}
         </p>
       </div>
     )
@@ -829,6 +856,7 @@ export function CustomerTable({
                       variant="outline"
                       onClick={() => onEdit(customer)}
                       title="Chỉnh sửa"
+                      aria-label="Chỉnh sửa"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -837,6 +865,7 @@ export function CustomerTable({
                       variant="outline"
                       onClick={() => onPrint(customer)}
                       title="In phiếu"
+                      aria-label="In phiếu"
                     >
                       <FileText className="h-4 w-4" />
                     </Button>
@@ -845,6 +874,7 @@ export function CustomerTable({
                       variant="outline"
                       onClick={() => setHistoryCustomer({ name: customer.customerName, phone: customer.phone })}
                       title="Lịch sử sửa máy"
+                      aria-label="Lịch sử"
                     >
                       <History className="h-4 w-4" />
                     </Button>
@@ -853,6 +883,7 @@ export function CustomerTable({
                       variant="outline"
                       onClick={() => onViewStatusHistory(customer)}
                       title="Lịch sử trạng thái"
+                      aria-label="Lịch sử trạng thái"
                     >
                       <Clock className="h-4 w-4" />
                     </Button>
@@ -862,6 +893,7 @@ export function CustomerTable({
                       onClick={() => setConfirmDialog({ open: true, title: 'Xóa đơn hàng', description: 'Bạn có chắc muốn xóa đơn hàng này? Hành động này không thể hoàn tác.', onConfirm: () => { handleDelete(customer.id) } })}
                       disabled={deleting === customer.id || bulkActionLoading}
                       title="Xóa"
+                      aria-label="Xóa"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -874,53 +906,78 @@ export function CustomerTable({
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between gap-4 mt-4 px-1">
+      <div className="flex flex-col gap-3 mt-4 px-1 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-gray-600">
           Trang {page} / {totalPages}
         </p>
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onPageChange(page - 1)}
-            disabled={page <= 1}
-            className="h-8 w-8 p-0"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-            .reduce<(number | string)[]>((acc, p, i, arr) => {
-              if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...')
-              acc.push(p)
-              return acc
-            }, [])
-            .map((p, i) =>
-              typeof p === 'string' ? (
-                <span key={`ellipsis-${i}`} className="px-1 text-sm text-gray-400">...</span>
-              ) : (
-                <Button
-                  key={p}
-                  size="sm"
-                  variant={p === page ? 'default' : 'outline'}
-                  onClick={() => onPageChange(p)}
-                  className={`h-8 w-8 p-0 text-sm ${
-                    p === page ? 'bg-blue-600 text-white hover:bg-blue-700' : ''
-                  }`}
-                >
-                  {p}
-                </Button>
-              )
-            )}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onPageChange(page + 1)}
-            disabled={page >= totalPages}
-            className="h-8 w-8 p-0"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onPageChange(page - 1)}
+              disabled={page <= 1}
+              className="h-8 w-8 p-0"
+              aria-label="Trang trước"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+              .reduce<(number | string)[]>((acc, p, i, arr) => {
+                if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...')
+                acc.push(p)
+                return acc
+              }, [])
+              .map((p, i) =>
+                typeof p === 'string' ? (
+                  <span key={`ellipsis-${i}`} className="px-1 text-sm text-gray-400">...</span>
+                ) : (
+                  <Button
+                    key={p}
+                    size="sm"
+                    variant={p === page ? 'default' : 'outline'}
+                    onClick={() => onPageChange(p)}
+                    className={`h-8 w-8 p-0 text-sm ${
+                      p === page ? 'bg-blue-600 text-white hover:bg-blue-700' : ''
+                    }`}
+                  >
+                    {p}
+                  </Button>
+                )
+              )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onPageChange(page + 1)}
+              disabled={page >= totalPages}
+              className="h-8 w-8 p-0"
+              aria-label="Trang sau"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5">
+            <span className="text-sm text-gray-500">Đi đến</span>
+            <Input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleGoToPage()
+                }
+              }}
+              className="h-8 w-20 bg-white text-sm"
+              aria-label="Đi đến trang"
+            />
+            <Button size="sm" variant="outline" className="h-8" onClick={handleGoToPage}>
+              Go
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -958,7 +1015,7 @@ export function CustomerTable({
                 </option>
                 <option value="pending">Chờ sửa</option>
                 <option value="repairing">Đang sửa</option>
-                <option value="completed">Xong</option>
+                <option value="completed">Đã xong</option>
                 <option value="returned">Đã trả máy</option>
               </Select>
             </div>
@@ -971,7 +1028,22 @@ export function CustomerTable({
           <DialogHeader>
             <DialogTitle>{confirmDialog.title}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-gray-600">{confirmDialog.description}</p>
+          <div className="space-y-3">
+            <div className="text-sm text-gray-600">{confirmDialog.description}</div>
+            {confirmDialog.title === 'Xóa khách hàng đã chọn' && selectedCustomers.length > 0 && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Danh sách ticket</p>
+                <ul className="max-h-40 space-y-1 overflow-y-auto text-sm text-gray-700">
+                  {selectedCustomers.map((customer) => (
+                    <li key={customer.id} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 shadow-sm">
+                      <span className="font-medium text-gray-900">{customer.ticketId}</span>
+                      <span className="truncate text-gray-500">{customer.customerName}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Hủy</Button>
             <Button variant="destructive" onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })) }}>Xác nhận</Button>

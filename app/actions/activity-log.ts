@@ -1,5 +1,6 @@
 'use server'
 
+import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { activityLog } from '@/lib/db/schema'
 import { desc, eq, and, gte, lte, count } from 'drizzle-orm'
@@ -39,6 +40,14 @@ export async function logActivity(
   }
 }
 
+async function requireAdmin() {
+  const result = await getSession()
+  if (!result?.user || result.user.role !== 'admin') {
+    throw new Error('Chỉ admin mới có thể thực hiện thao tác này')
+  }
+  return result.user
+}
+
 export async function getActivityLogs(
   page: number = 1,
   limit: number = 20,
@@ -47,6 +56,9 @@ export async function getActivityLogs(
   dateFrom?: string,
   dateTo?: string
 ) {
+  const admin = await requireAdmin()
+  void admin
+
   const conditions: any[] = []
 
   if (actionFilter) {
@@ -93,10 +105,16 @@ export async function getActivityLogs(
 }
 
 export async function deleteAllLogs() {
+  const admin = await requireAdmin()
+  void admin
+
   await db.delete(activityLog)
 }
 
 export async function getActivityStats() {
+  const admin = await requireAdmin()
+  void admin
+
   // Get total count
   const totalResult = await db
     .select({ total: count() })

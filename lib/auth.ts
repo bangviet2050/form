@@ -8,6 +8,11 @@ import { randomUUID } from 'crypto'
 const SESSION_COOKIE = 'session_token'
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
+function sanitizeUser<T extends { password?: string | null }>(u: T) {
+  const { password: _, ...safeUser } = u
+  return safeUser
+}
+
 // --- Password helpers ---
 
 export async function hashPassword(password: string): Promise<string> {
@@ -61,7 +66,8 @@ export async function getSession() {
     return null
   }
 
-  return { session: s, user: u }
+  const safeUser = sanitizeUser(u)
+  return { session: s, user: safeUser }
 }
 
 export async function deleteSession() {
@@ -100,7 +106,7 @@ export async function createUser(email: string, password: string, name: string) 
     })
     .returning()
 
-  return result[0]
+  return sanitizeUser(result[0]!)
 }
 
 export async function getUserByEmail(email: string) {
@@ -126,13 +132,13 @@ export async function findOrCreateGoogleUser(email: string, name: string, pictur
         .set({ status: 'pending', role: 'staff', canAddOptions: false, permissions: null, avatar: picture || existing.avatar, updatedAt: now })
         .where(eq(user.id, existing.id))
         .returning()
-      return { ...updated[0], _wasDeleted: true }
+      return { ...sanitizeUser(updated[0]!), _wasDeleted: true }
     }
     // Update avatar if Google provides one and user doesn't have it
     if (picture && !existing.avatar) {
       await db.update(user).set({ avatar: picture, updatedAt: new Date() }).where(eq(user.id, existing.id))
     }
-    return existing
+    return sanitizeUser(existing)
   }
 
   const isFirst = await isFirstUser()
@@ -157,7 +163,7 @@ export async function findOrCreateGoogleUser(email: string, name: string, pictur
     })
     .returning()
 
-  return result[0]
+  return sanitizeUser(result[0]!)
 }
 
 export { SESSION_COOKIE, SESSION_DURATION_MS }

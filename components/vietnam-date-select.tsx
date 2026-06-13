@@ -14,7 +14,7 @@ export function VietnamDateSelect({
   required = false,
 }: VietnamDateSelectProps) {
   const currentYear = new Date().getFullYear()
-  const years = Array.from({ length: 7 }, (_, i) => currentYear - 5 + i)
+  const years = Array.from({ length: 21 }, (_, i) => currentYear - 10 + i)
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
 
   const parseParts = (dateStr: string) => {

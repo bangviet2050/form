@@ -155,7 +155,7 @@ export function SuggestTextarea({
         placeholder={placeholder}
         required={required}
         autoComplete="off"
-        className="flex w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-400 resize-none"
+        className="flex w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-400 resize-y"
       />
       {showList && filtered.length > 0 && (
         <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto overflow-x-hidden rounded-lg border border-gray-200 bg-white shadow-lg">

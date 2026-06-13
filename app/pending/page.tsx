@@ -11,38 +11,54 @@ export default function PendingPage() {
   const router = useRouter()
   const [user, setUser] = useState<{ name: string; email: string; status: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
-    checkStatus()
+    void checkStatus(true)
   }, [])
 
   useEffect(() => {
     const interval = setInterval(() => {
-      checkStatus()
+      void checkStatus(false)
     }, 5000)
     return () => clearInterval(interval)
   }, [])
 
-  const checkStatus = async () => {
-    setLoading(true)
-    const u = await getCurrentUser() as any
-    if (!u) {
-      router.push('/sign-in')
-      return
+  const checkStatus = async (showFullLoading = false) => {
+    if (showFullLoading) {
+      setLoading(true)
+    } else {
+      setRefreshing(true)
     }
-    setUser({ name: u.name, email: u.email, status: u.status })
-    setLoading(false)
 
-    // If approved, redirect to dashboard
-    if (u.status === 'approved') {
-      router.push('/dashboard')
-      return
-    }
-    // If rejected, sign out and redirect to sign-in
-    if (u.status === 'rejected') {
-      await signOut()
-      router.push('/sign-in?error=' + encodeURIComponent('Tài khoản đã bị từ chối.'))
-      return
+    try {
+      const u = (await getCurrentUser()) as any
+      if (!u) {
+        router.push('/sign-in')
+        return
+      }
+
+      setUser({ name: u.name, email: u.email, status: u.status })
+
+      // If approved, redirect to dashboard
+      if (u.status === 'approved') {
+        router.push('/dashboard')
+        return
+      }
+      // If rejected, sign out and redirect to sign-in
+      if (u.status === 'rejected') {
+        await signOut()
+        router.push('/sign-in?error=' + encodeURIComponent('Tài khoản đã bị từ chối.'))
+        return
+      }
+    } catch (err) {
+      console.error('Failed to check pending account status:', err)
+    } finally {
+      if (showFullLoading) {
+        setLoading(false)
+      } else {
+        setRefreshing(false)
+      }
     }
   }
 
@@ -91,12 +107,13 @@ export default function PendingPage() {
 
         <div className="flex flex-col gap-3">
           <Button
-            onClick={checkStatus}
+            onClick={() => void checkStatus(false)}
             variant="outline"
+            disabled={refreshing}
             className="w-full flex items-center justify-center gap-2"
           >
-            <RefreshCw className="h-4 w-4" />
-            Kiểm tra lại trạng thái
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Đang kiểm tra...' : 'Kiểm tra lại trạng thái'}
           </Button>
           <p className="text-xs text-gray-400 mt-2">Tự động kiểm tra mỗi 5 giây...</p>
 

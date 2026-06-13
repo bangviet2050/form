@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ExcelJS from 'exceljs'
 import { toast } from 'sonner'
@@ -10,8 +10,7 @@ import { CustomerTable } from '@/components/customer-table'
 import { SearchFilter } from '@/components/search-filter'
 import { PrintInvoice } from '@/components/print-invoice'
 import { Sheet } from '@/components/ui/sheet'
-import { formatVietnamDateTime } from '@/lib/utils'
-import { getCustomers, getCustomerStats } from '@/app/actions/customers'
+import { getCustomers, getCustomerStats, getCustomerStaffNames } from '@/app/actions/customers'
 import { getCurrentUser, signOut } from '@/app/actions/auth'
 import type { Customer } from '@/lib/types'
 import {
@@ -23,8 +22,6 @@ import {
   CheckCircle2,
   RotateCcw,
   DollarSign,
-  Users,
-  Loader2,
   Eye,
   EyeOff,
 } from 'lucide-react'
@@ -79,7 +76,6 @@ function formatTimelineDate(dateString: string) {
 export default function DashboardPage() {
   const router = useRouter()
   const [customers, setCustomers] = useState<Customer[]>([])
-  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalCustomers: 0,
@@ -100,47 +96,40 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [staffFilter, setStaffFilter] = useState('')
+  const [staffOptions, setStaffOptions] = useState<string[]>([])
   const [hideRevenue, setHideRevenue] = useState(false)
   const [viewAll, setViewAll] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadData = async (
     page: number = currentPage,
+    search: string = searchQuery,
     status: string = statusFilter,
     fromDate: string = dateFrom,
     toDate: string = dateTo,
-    showAll: boolean = viewAll
+    showAll: boolean = viewAll,
+    staffName: string = staffFilter
   ) => {
     try {
       setLoading(true)
       const [result, statsData] = await Promise.all([
         getCustomers(
-          undefined,
+          search || undefined,
           'recent',
           page,
           13,
           status || undefined,
           fromDate || undefined,
           toDate || undefined,
-          showAll || undefined
+          showAll || undefined,
+          staffName || undefined
         ),
-        getCustomerStats(showAll || undefined),
+        getCustomerStats(showAll || undefined, staffName || undefined),
       ])
       setCustomers(result.data)
-      // Re-apply search filter
-      if (searchQuery) {
-        const lowerQuery = searchQuery.toLowerCase()
-        const filtered = result.data.filter(
-          (c) =>
-            c.customerName.toLowerCase().includes(lowerQuery) ||
-            c.phone.includes(searchQuery) ||
-            c.ticketId.includes(searchQuery)
-        )
-        setFilteredCustomers(filtered)
-      } else {
-        setFilteredCustomers(result.data)
-      }
       setTotalPages(result.totalPages)
       setCurrentPage(result.page)
       setStats(statsData)
@@ -149,7 +138,6 @@ export default function DashboardPage() {
       console.error('Error loading data:', error instanceof Error ? error.message : 'Unknown error')
       toast.error('Lỗi tải dữ liệu. Vui lòng thử lại.')
       setCustomers([])
-      setFilteredCustomers([])
     } finally {
       setLoading(false)
     }
@@ -157,7 +145,7 @@ export default function DashboardPage() {
 
   const refreshStats = async () => {
     try {
-      const statsData = await getCustomerStats(viewAll || undefined)
+      const statsData = await getCustomerStats(viewAll || undefined, staffFilter || undefined)
       setStats(statsData)
     } catch {
       // silent — stats will refresh on next full load
@@ -165,35 +153,30 @@ export default function DashboardPage() {
   }
 
   // Silent refresh for dashboard (no loading spinner)
+  const clearSearchDebounce = () => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current)
+      searchDebounceRef.current = null
+    }
+  }
+
   const silentRefresh = async () => {
     try {
       const [result, statsData] = await Promise.all([
         getCustomers(
-          undefined,
+          searchQuery || undefined,
           'recent',
           currentPage,
           13,
           statusFilter || undefined,
           dateFrom || undefined,
           dateTo || undefined,
-          viewAll || undefined
+          viewAll || undefined,
+          staffFilter || undefined
         ),
-        getCustomerStats(viewAll || undefined),
+        getCustomerStats(viewAll || undefined, staffFilter || undefined),
       ])
       setCustomers(result.data)
-      // Re-apply search filter to new data
-      if (searchQuery) {
-        const lowerQuery = searchQuery.toLowerCase()
-        const filtered = result.data.filter(
-          (c) =>
-            c.customerName.toLowerCase().includes(lowerQuery) ||
-            c.phone.includes(searchQuery) ||
-            c.ticketId.includes(searchQuery)
-        )
-        setFilteredCustomers(filtered)
-      } else {
-        setFilteredCustomers(result.data)
-      }
       setTotalPages(result.totalPages)
       setStats(statsData)
       setLastUpdated(new Date())
@@ -202,27 +185,15 @@ export default function DashboardPage() {
     }
   }
 
-  // Auto-refresh every 8s when admin is viewing all orders
   useEffect(() => {
-    if (user?.role !== 'admin' || !viewAll) return
-    const interval = setInterval(silentRefresh, 8000)
-    return () => clearInterval(interval)
-  }, [viewAll, user?.role, currentPage, statusFilter, dateFrom, dateTo, searchQuery])
-
-  // Refresh when window regains focus (admin viewAll mode)
-  useEffect(() => {
-    if (user?.role !== 'admin' || !viewAll) return
-    const onFocus = () => silentRefresh()
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [viewAll, user?.role, currentPage, statusFilter, dateFrom, dateTo, searchQuery])
-
-  useEffect(() => {
-    Promise.all([
+    void Promise.all([
       getCurrentUser().then((u) => {
-        if (!u) { setUser(null); router.push('/sign-in'); return }
+        if (!u) {
+          setUser(null)
+          router.push('/sign-in')
+          return
+        }
         const userData = u as any
-        // Check if user is pending or rejected or deleted
         if (userData.status === 'pending') {
           router.push('/pending')
           return
@@ -240,268 +211,202 @@ export default function DashboardPage() {
           return
         }
         setUser({ name: userData.name || '', email: userData.email, role: userData.role, status: userData.status, avatar: userData.avatar })
+        // Preload staff options for admin
+        if (userData.role === 'admin') {
+          getCustomerStaffNames(true).then(setStaffOptions).catch(() => {})
+        }
       }),
-      loadData(1, ''),
-    ])
+      loadData(1, searchQuery, statusFilter, dateFrom, dateTo, viewAll, staffFilter),
+    ]).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (user?.role !== 'admin' || !viewAll) return
+    const interval = setInterval(() => { void silentRefresh() }, 8000)
+    return () => clearInterval(interval)
+  }, [viewAll, user?.role, currentPage, statusFilter, dateFrom, dateTo, searchQuery, staffFilter])
+
+  useEffect(() => {
+    if (user?.role !== 'admin' || !viewAll) return
+    const onFocus = () => { void silentRefresh() }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [viewAll, user?.role, currentPage, statusFilter, dateFrom, dateTo, searchQuery, staffFilter])
+
+  useEffect(() => () => {
+    clearSearchDebounce()
   }, [])
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
-    if (!query) {
-      setFilteredCustomers(customers)
-      return
-    }
-    const lowerQuery = query.toLowerCase()
-    const filtered = customers.filter(
-      (c) =>
-        c.customerName.toLowerCase().includes(lowerQuery) ||
-        c.phone.includes(query) ||
-        c.ticketId.includes(query)
-    )
-    setFilteredCustomers(filtered)
+    setCurrentPage(1)
+    clearSearchDebounce()
+    searchDebounceRef.current = setTimeout(() => {
+      void loadData(1, query, statusFilter, dateFrom, dateTo, viewAll, staffFilter)
+    }, 300)
   }
 
   const handleExport = async () => {
-    const exportResult = await getCustomers(
-      undefined,
-      'recent',
-      1,
-      undefined,
-      statusFilter || undefined,
-      dateFrom || undefined,
-      dateTo || undefined,
-      viewAll || undefined
-    )
+    try {
+      const exportResult = await getCustomers(
+        searchQuery || undefined,
+        'recent',
+        1,
+        undefined,
+        statusFilter || undefined,
+        dateFrom || undefined,
+        dateTo || undefined,
+        viewAll || undefined,
+        staffFilter || undefined
+      )
 
-    const exportCustomers = exportResult.data
-
-    if (exportCustomers.length === 0) {
-      toast.warning('Không có dữ liệu để xuất')
-      return
-    }
-
-    const wb = new ExcelJS.Workbook()
-    const ws = wb.addWorksheet('Khách hàng')
-
-    const now = new Date()
-    const dateStr = now.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
-    const timeStr = now.toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hour12: false })
-
-    const fontTitle: Partial<ExcelJS.Font> = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF1F4E79' } }
-    const fontInfo: Partial<ExcelJS.Font> = { name: 'Times New Roman', size: 11, italic: true, color: { argb: 'FF666666' } }
-    const fontHeader: Partial<ExcelJS.Font> = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FFFFFFFF' } }
-    const fontData: Partial<ExcelJS.Font> = { name: 'Times New Roman', size: 13 }
-    const fontTotal: Partial<ExcelJS.Font> = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FF1F4E79' } }
-
-    const fillHeader: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
-    const fillEven: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEBF5FB' } }
-    const fillOdd: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }
-    const fillTotal: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F0' } }
-
-    const thinBorder: Partial<ExcelJS.Borders> = {
-      top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-      bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-      left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-      right: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-    }
-    const headerBorder: Partial<ExcelJS.Borders> = {
-      top: { style: 'thin', color: { argb: 'FF000000' } },
-      bottom: { style: 'thin', color: { argb: 'FF000000' } },
-      left: { style: 'thin', color: { argb: 'FF000000' } },
-      right: { style: 'thin', color: { argb: 'FF000000' } },
-    }
-    const totalBorder: Partial<ExcelJS.Borders> = {
-      top: { style: 'medium', color: { argb: 'FF1F4E79' } },
-      bottom: { style: 'medium', color: { argb: 'FF1F4E79' } },
-      left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-      right: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-    }
-
-    const alignCenter: Partial<ExcelJS.Alignment> = { horizontal: 'center', vertical: 'middle', wrapText: true }
-    const alignLeft: Partial<ExcelJS.Alignment> = { horizontal: 'left', vertical: 'middle', wrapText: true }
-    const alignRight: Partial<ExcelJS.Alignment> = { horizontal: 'right', vertical: 'middle', wrapText: true }
-
-    // Helper: calculate display width of a string (Vietnamese chars wider)
-    const charWidth = (ch: string) => ch.charCodeAt(0) > 127 ? 1.8 : 1
-    const textWidth = (text: string) => [...text].reduce((sum, ch) => sum + charWidth(ch), 0)
-
-    // Collect all data values first for auto-fit calculation
-    const headers = [
-      'STT', 'Mã phiếu', 'Tên khách hàng', 'SĐT', 'Ngày nhận',
-      'Người nhận', 'Hiệu máy', 'Model', 'Phụ kiện', 'Tình trạng trước',
-      'Tình trạng sau', 'Giá sửa (VNĐ)', 'Người sửa', 'Trạng thái', 'Ngày trả', 'Ghi chú',
-    ]
-
-    const dataRows = exportCustomers.map((c, idx) => [
-      String(idx + 1),
-      c.ticketId,
-      c.customerName,
-      c.phone,
-      new Date(c.receivedDate).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' ' + new Date(c.receivedDate).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hour12: false }),
-      c.receivedBy || '',
-      c.deviceType,
-      c.deviceModel || '',
-      c.accessories || '',
-      c.conditionBefore || '',
-      c.conditionAfter || '',
-      c.repairCost ? Number(c.repairCost).toLocaleString('vi-VN') : '',
-      c.repairedBy || '',
-      c.status === 'pending' ? 'Chờ sửa' : c.status === 'repairing' ? 'Đang sửa' : c.status === 'completed' ? 'Xong' : c.status === 'returned' ? 'Đã trả máy' : c.status,
-      c.returnedDate ? new Date(c.returnedDate).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' ' + new Date(c.returnedDate).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hour12: false }) : '',
-      c.notes || '',
-    ])
-
-    // AutoFit Column Width: max of header width and data width, with padding
-    const MIN_COL_WIDTH = 8
-    const MAX_COL_WIDTH = 50
-    const COL_PADDING = 3
-    const colWidths = headers.map((header, colIdx) => {
-      const headerW = textWidth(header) + COL_PADDING
-      let maxDataW = 0
-      dataRows.forEach((row) => {
-        const cellText = row[colIdx] || ''
-        // For multi-line, take the longest line
-        const lines = cellText.split('\n')
-        const longestLine = Math.max(...lines.map((l: string) => textWidth(l)))
-        maxDataW = Math.max(maxDataW, longestLine)
-      })
-      return Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, Math.max(headerW, maxDataW + COL_PADDING)))
-    })
-
-    ws.columns = colWidths.map((w) => ({ width: w }))
-
-    const titleRow = ws.addRow(['DANH SÁCH KHÁCH HÀNG SỬA CHỮA THIẾT BỊ ĐIỆN TỬ'])
-    titleRow.height = 35
-    titleRow.getCell(1).font = fontTitle
-    titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
-    ws.mergeCells('A1:P1')
-
-    const infoRow = ws.addRow([`Xuất lúc: ${dateStr} ${timeStr}  |  Tổng số: ${exportCustomers.length} khách`])
-    infoRow.height = 22
-    infoRow.getCell(1).font = fontInfo
-    infoRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
-    ws.mergeCells('A2:P2')
-
-    ws.addRow([''])
-
-    const headerRow = ws.addRow(headers)
-    headerRow.height = 28
-    for (let i = 1; i <= 16; i++) {
-      const cell = headerRow.getCell(i)
-      cell.font = fontHeader
-      cell.fill = fillHeader
-      cell.border = headerBorder
-      cell.alignment = alignCenter
-    }
-
-    // Helper: calculate row height based on wrapped text
-    const ROW_HEIGHT_PER_LINE = 18
-    const MIN_ROW_HEIGHT = 22
-    const calcRowHeight = (values: string[]) => {
-      let maxLines = 1
-      values.forEach((text, colIdx) => {
-        if (!text) return
-        const colW = colWidths[colIdx] || 10
-        const lines = text.split('\n')
-        lines.forEach((line: string) => {
-          const w = textWidth(line)
-          const wrappedLines = Math.max(1, Math.ceil(w / (colW - 1)))
-          maxLines = Math.max(maxLines, wrappedLines + lines.length - 1)
-        })
-      })
-      return Math.max(MIN_ROW_HEIGHT, maxLines * ROW_HEIGHT_PER_LINE)
-    }
-
-    exportCustomers.forEach((c, idx) => {
-      const isEven = idx % 2 === 0
-      const row = ws.addRow([
-        idx + 1,
-        c.ticketId,
-        c.customerName,
-        c.phone,
-        new Date(c.receivedDate).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' ' + new Date(c.receivedDate).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hour12: false }),
-        c.receivedBy || '',
-        c.deviceType,
-        c.deviceModel || '',
-        c.accessories || '',
-        c.conditionBefore || '',
-        c.conditionAfter || '',
-        c.repairCost ? Number(c.repairCost) : '',
-        c.repairedBy || '',
-        c.status === 'pending' ? 'Chờ sửa' : c.status === 'repairing' ? 'Đang sửa' : c.status === 'completed' ? 'Xong' : c.status === 'returned' ? 'Đã trả máy' : c.status,
-        c.returnedDate ? new Date(c.returnedDate).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' ' + new Date(c.returnedDate).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hour12: false }) : '',
-        c.notes || '',
-      ])
-
-      // AutoFit Row Height
-      const cellValues = dataRows[idx]
-      row.height = calcRowHeight(cellValues)
-
-      for (let i = 1; i <= 16; i++) {
-        const cell = row.getCell(i)
-        cell.font = fontData
-        cell.fill = isEven ? fillEven : fillOdd
-        cell.border = thinBorder
-        if (i === 1) cell.alignment = alignCenter
-        else if (i === 12) cell.alignment = alignRight
-        else cell.alignment = alignLeft
+      const exportCustomers = exportResult.data
+      if (exportCustomers.length === 0) {
+        toast.warning('Không có dữ liệu để xuất')
+        return
       }
 
-      if (c.repairCost) row.getCell(12).numFmt = '#,##0'
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Khách hàng')
+      worksheet.columns = [
+        { header: 'STT', key: 'stt', width: 6 },
+        { header: 'Mã phiếu', key: 'ticketId', width: 12 },
+        { header: 'Khách hàng', key: 'customerName', width: 20 },
+        { header: 'SĐT', key: 'phone', width: 14 },
+        { header: 'Ngày nhận', key: 'receivedDate', width: 18 },
+        { header: 'Người nhận', key: 'receivedBy', width: 16 },
+        { header: 'Hiệu máy', key: 'deviceType', width: 14 },
+        { header: 'Model', key: 'deviceModel', width: 16 },
+        { header: 'Phụ kiện', key: 'accessories', width: 18 },
+        { header: 'Trước khi sửa', key: 'conditionBefore', width: 18 },
+        { header: 'Sau khi sửa', key: 'conditionAfter', width: 18 },
+        { header: 'Giá sửa (VNĐ)', key: 'repairCost', width: 16 },
+        { header: 'Người sửa', key: 'repairedBy', width: 16 },
+        { header: 'Trạng thái', key: 'status', width: 14 },
+        { header: 'Ngày trả', key: 'returnedDate', width: 18 },
+        { header: 'Ghi chú', key: 'notes', width: 24 },
+      ]
 
-      const statusCell = row.getCell(14)
-      if (c.status === 'pending') statusCell.font = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FFB8860B' } }
-      else if (c.status === 'repairing') statusCell.font = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FF1F4E79' } }
-      else if (c.status === 'completed') statusCell.font = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FF2E7D32' } }
-      else if (c.status === 'returned') statusCell.font = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FF757575' } }
-    })
+      const statusLabel = (status: string) => {
+        switch (status) {
+          case 'pending': return 'Chờ sửa'
+          case 'repairing': return 'Đang sửa'
+          case 'completed': return 'Đã xong'
+          case 'returned': return 'Đã trả máy'
+          default: return status
+        }
+      }
 
-    ws.addRow([''])
+      exportCustomers.forEach((customer, index) => {
+        worksheet.addRow({
+          stt: index + 1,
+          ticketId: customer.ticketId,
+          customerName: customer.customerName,
+          phone: customer.phone,
+          receivedDate: customer.receivedDate
+            ? new Date(customer.receivedDate).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false })
+            : '',
+          receivedBy: customer.receivedBy || '',
+          deviceType: customer.deviceType,
+          deviceModel: customer.deviceModel || '',
+          accessories: customer.accessories || '',
+          conditionBefore: customer.conditionBefore || '',
+          conditionAfter: customer.conditionAfter || '',
+          repairCost: customer.repairCost ? Number(customer.repairCost) : '',
+          repairedBy: customer.repairedBy || '',
+          status: statusLabel(customer.status),
+          returnedDate: customer.returnedDate
+            ? new Date(customer.returnedDate).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false })
+            : '',
+          notes: customer.notes || '',
+        })
+      })
 
-    const totalRevenue = exportCustomers.reduce((sum, c) => sum + (c.repairCost ? Number(c.repairCost) : 0), 0)
-    const totalRow = ws.addRow(['', '', '', '', '', '', '', '', '', '', 'Tổng cộng:', totalRevenue, '', '', '', ''])
-    totalRow.height = 26
-    for (let i = 1; i <= 16; i++) {
-      const cell = totalRow.getCell(i)
-      cell.font = fontTotal
-      cell.fill = fillTotal
-      cell.border = totalBorder
-      if (i === 11) cell.alignment = alignRight
-      else if (i === 12) { cell.alignment = alignRight; cell.numFmt = '#,##0' }
-      else cell.alignment = alignLeft
+      const headerRow = worksheet.getRow(1)
+      headerRow.font = { bold: true }
+      headerRow.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `khach-hang-${new Date().toISOString().split('T')[0]}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      toast.error('Không thể xuất Excel: ' + (error instanceof Error ? error.message : 'Không xác định'))
     }
-
-    const buffer = await wb.xlsx.writeBuffer()
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `khach-hang-${new Date().toISOString().split('T')[0]}.xlsx`
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   const handleStatusFilter = (status: string) => {
     setStatusFilter(status)
     setCurrentPage(1)
-    loadData(1, status, dateFrom, dateTo)
+    clearSearchDebounce()
+    void loadData(1, searchQuery, status, dateFrom, dateTo, viewAll, staffFilter)
   }
 
   const handleDateFromChange = (value: string) => {
     setDateFrom(value)
     setCurrentPage(1)
-    loadData(1, statusFilter, value, dateTo)
+    clearSearchDebounce()
+    void loadData(1, searchQuery, statusFilter, value, dateTo, viewAll, staffFilter)
   }
 
   const handleDateToChange = (value: string) => {
     setDateTo(value)
     setCurrentPage(1)
-    loadData(1, statusFilter, dateFrom, value)
+    clearSearchDebounce()
+    void loadData(1, searchQuery, statusFilter, dateFrom, value, viewAll, staffFilter)
+  }
+
+  const handleStaffFilterChange = (value: string) => {
+    setStaffFilter(value)
+    setCurrentPage(1)
+    clearSearchDebounce()
+    void loadData(1, searchQuery, statusFilter, dateFrom, dateTo, viewAll, value)
+  }
+
+  const handleClearFilters = () => {
+    clearSearchDebounce()
+    setSearchQuery('')
+    setStatusFilter('')
+    setDateFrom('')
+    setDateTo('')
+    setStaffFilter('')
+    setCurrentPage(1)
+    void loadData(1, '', '', '', '', viewAll, '')
   }
 
   const handlePageChange = (page: number) => {
-    setCurrentPage(page)
-    loadData(page, statusFilter, dateFrom, dateTo)
+    const nextPage = Math.min(Math.max(1, page), totalPages)
+    clearSearchDebounce()
+    setCurrentPage(nextPage)
+    void loadData(nextPage, searchQuery, statusFilter, dateFrom, dateTo, viewAll, staffFilter)
+  }
+
+  const handleToggleViewAll = async (showAll?: boolean, staffName?: string) => {
+    const next = showAll !== undefined ? showAll : !viewAll
+    clearSearchDebounce()
+    setViewAll(next)
+    if (!next) {
+      setStaffFilter('')
+      setStaffOptions([])
+    }
+    if (next) {
+      try {
+        const options = await getCustomerStaffNames(true)
+        setStaffOptions(options)
+      } catch {
+        setStaffOptions([])
+      }
+    }
+    const nextStaff = next ? (staffName !== undefined ? staffName : staffFilter) : ''
+    if (staffName !== undefined) {
+      setStaffFilter(staffName)
+    }
+    setCurrentPage(1)
+    await loadData(1, searchQuery, statusFilter, dateFrom, dateTo, next, nextStaff)
   }
 
   const handleLogout = async () => {
@@ -525,8 +430,7 @@ export default function DashboardPage() {
     setPrintOpen(true)
   }
 
-  const statusHistory = editingCustomer ? parseStatusHistory(editingCustomer.statusHistory) : []
-  const hasActiveFilters = Boolean(searchQuery.trim() || statusFilter || dateFrom || dateTo)
+  const hasActiveFilters = Boolean(searchQuery.trim() || statusFilter || dateFrom || dateTo || staffFilter)
 
   const statCards = [
     { label: 'Chờ sửa', value: stats.pending, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', iconBg: 'bg-amber-100' },
@@ -576,22 +480,31 @@ export default function DashboardPage() {
                   <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">ADMIN</span>
                 )}
                 {user?.role === 'admin' && (
-                  <button
-                    onClick={() => {
-                      const next = !viewAll
-                      setViewAll(next)
-                      loadData(1, '', '', '', next)
+                  <select
+                    value={!viewAll ? '__mine__' : staffFilter || '__all__'}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (val === '__mine__') {
+                        void handleToggleViewAll(false)
+                      } else if (val === '__all__') {
+                        void handleToggleViewAll(true)
+                      } else {
+                        void handleToggleViewAll(true, val)
+                      }
                     }}
-                    className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full transition-colors ${
-                      viewAll
-                        ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                    }`}
-                    title={viewAll ? 'Chỉ xem đơn của tôi' : 'Xem tất cả đơn'}
+                    className="h-7 rounded-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 transition-colors outline-none hover:border-indigo-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 cursor-pointer"
+                    aria-label="Chọn xem đơn theo"
                   >
-                    {viewAll ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                    {viewAll ? 'Tất cả đơn' : 'Đơn của tôi'}
-                  </button>
+                    <option value="__mine__">Đơn của tôi</option>
+                    <option value="__all__">Tất cả đơn</option>
+                    {staffOptions.length > 0 && (
+                      <optgroup label="─ Nhân viên ─">
+                        {staffOptions.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
                 )}
                 {user?.role === 'admin' && viewAll && (
                   <span className="flex items-center gap-1.5 text-[10px] text-gray-400 ml-1">
@@ -608,6 +521,7 @@ export default function DashboardPage() {
                 variant="ghost"
                 size="sm"
                 className="text-slate-400 hover:text-red-600 gap-1.5"
+                aria-label="Đăng xuất"
               >
                 <LogOut className="h-4 w-4" />
               </Button>
@@ -649,6 +563,7 @@ export default function DashboardPage() {
               onClick={() => setHideRevenue((v) => !v)}
               className="flex items-center justify-center h-8 w-8 rounded-lg text-emerald-400 hover:text-emerald-600 hover:bg-emerald-100 transition-colors shrink-0"
               title={hideRevenue ? 'Hiện doanh thu' : 'Ẩn doanh thu'}
+              aria-label={hideRevenue ? 'Hiện doanh thu' : 'Ẩn doanh thu'}
             >
               {hideRevenue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
@@ -661,7 +576,9 @@ export default function DashboardPage() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-4 border-b border-slate-100">
             <div className="flex-1">
               <SearchFilter
+                searchTerm={searchQuery}
                 onSearch={handleSearch}
+                onClearFilters={handleClearFilters}
                 onExport={handleExport}
                 onStatusFilter={handleStatusFilter}
                 currentStatus={statusFilter}
@@ -669,6 +586,10 @@ export default function DashboardPage() {
                 dateTo={dateTo}
                 onDateFromChange={handleDateFromChange}
                 onDateToChange={handleDateToChange}
+                staffName={staffFilter}
+                staffOptions={staffOptions}
+                onStaffNameChange={handleStaffFilterChange}
+                showStaffFilter={false}
               />
             </div>
             <Button
@@ -683,19 +604,20 @@ export default function DashboardPage() {
           {/* Table */}
           <div className="p-4 pt-0">
             {loading ? (
-              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                <Loader2 className="h-8 w-8 animate-spin mb-3" />
-                <p className="text-sm">Đang tải dữ liệu...</p>
+              <div className="animate-pulse space-y-3 p-4">
+                <div className="h-10 bg-muted rounded w-full" />
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-12 bg-muted rounded w-full" />
+                ))}
               </div>
             ) : (
               <CustomerTable
-                customers={filteredCustomers}
+                customers={customers}
                 hasFilters={hasActiveFilters}
                 onEdit={handleEditCustomer}
                 onRefresh={() => silentRefresh()}
                 onCustomersUpdate={(updated) => {
                   setCustomers(updated)
-                  setFilteredCustomers(updated)
                 }}
                 onStatsRefresh={refreshStats}
                 onPrint={handlePrintInvoice}

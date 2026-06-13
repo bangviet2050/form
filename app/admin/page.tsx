@@ -488,8 +488,17 @@ export default function AdminPage() {
   const openPermDialog = (userId: string, userName: string, currentPerms: string | null) => {
     setPermDialogUserId(userId)
     setPermDialogUserName(userName)
-    const parsed = currentPerms ? JSON.parse(currentPerms) : DEFAULT_PERMISSIONS
-    setPermDialogPerms({ ...DEFAULT_PERMISSIONS, ...parsed })
+
+    let parsedPermissions = DEFAULT_PERMISSIONS
+    try {
+      if (currentPerms) {
+        parsedPermissions = JSON.parse(currentPerms)
+      }
+    } catch {
+      parsedPermissions = DEFAULT_PERMISSIONS
+    }
+
+    setPermDialogPerms({ ...DEFAULT_PERMISSIONS, ...parsedPermissions })
     setPermDialogOpen(true)
   }
 
@@ -563,7 +572,14 @@ export default function AdminPage() {
 
   const isAdmin = user?.role === 'admin'
   const canAdd = isAdmin || user?.canAddOptions === true
-  const userPerms: StaffPermissions = user?.permissions ? { ...DEFAULT_PERMISSIONS, ...JSON.parse(user.permissions) } : DEFAULT_PERMISSIONS
+  let userPerms: StaffPermissions = DEFAULT_PERMISSIONS
+  try {
+    if (user?.permissions) {
+      userPerms = { ...DEFAULT_PERMISSIONS, ...JSON.parse(user.permissions) }
+    }
+  } catch {
+    userPerms = DEFAULT_PERMISSIONS
+  }
   const hasCategoryPerm = (key: keyof StaffPermissions['categories']) => isAdmin || userPerms.categories[key]
   const hasTabPerm = (key: keyof StaffPermissions['tabs']) => isAdmin || userPerms.tabs[key]
   const visibleCategories = CATEGORIES.filter(cat => isAdmin || hasCategoryPerm(cat.key as keyof StaffPermissions['categories']))

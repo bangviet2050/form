@@ -157,6 +157,16 @@ export function CustomerForm({
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
+  const handlePhoneBlur = () => {
+    if (formData.customerName.trim()) return
+
+    const existingCustomer = existingCustomers.find((c) => c.phone === formData.phone)
+    if (existingCustomer) {
+      setFormData((prev) => ({ ...prev, customerName: existingCustomer.customerName }))
+      toast.success('Đã tự động điền tên khách hàng')
+    }
+  }
+
   const handleCostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target.value
     const digits = input.replace(/[^\d]/g, '')
@@ -318,8 +328,6 @@ export function CustomerForm({
                       // Only allow digits, max 10
                       const val = e.target.value.replace(/\D/g, '').slice(0, 10)
                       setFormData((prev) => ({ ...prev, phone: val }))
-                      const match = existingCustomers.find((c) => c.phone === val)
-                      if (match) setFormData((prev) => ({ ...prev, customerName: match.customerName }))
                     }}
                     required
                     placeholder="0xxxxxxxxx"
@@ -328,6 +336,7 @@ export function CustomerForm({
                         ? existingCustomers.filter((c) => c.customerName === formData.customerName).map((c) => c.phone)
                         : []
                     }
+                    onBlur={handlePhoneBlur}
                   />
                   {formData.phone.length >= 3 && detectCarrier(formData.phone) && (
                     <div className="mt-2">

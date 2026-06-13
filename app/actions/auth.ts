@@ -98,7 +98,8 @@ export async function signIn(email: string, password: string) {
     path: '/',
   })
 
-  return { user: existingUser }
+  const { password: _, ...safeUser } = existingUser
+  return { user: safeUser }
 }
 
 export async function signOut() {

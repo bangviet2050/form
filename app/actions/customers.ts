@@ -3,7 +3,7 @@
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { logActivity } from '@/app/actions/activity-log'
-import { customers } from '@/lib/db/schema'
+import { customers, user } from '@/lib/db/schema'
 import { and, desc, eq, gte, like, lte, or, count, sum, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
@@ -11,6 +11,9 @@ async function requireAuth() {
   const result = await getSession()
   if (!result?.user) {
     throw new Error('Unauthorized')
+  }
+  if (result.user.status === 'deleted' || result.user.status === 'rejected') {
+    throw new Error('Tài khoản không còn hợp lệ')
   }
   return result.user
 }
@@ -106,14 +109,14 @@ export async function createCustomer(data: {
       conditionAfter: data.conditionAfter || null,
       receivedBy: data.receivedBy || null,
       repairedBy: data.repairedBy || null,
-      repairCost: data.repairCost || null,
+      repairCost: data.repairCost !== undefined && data.repairCost !== '' && data.repairCost !== null ? data.repairCost : null,
       notes: data.notes || null,
       status: data.status || 'pending',
       statusHistory: JSON.stringify([
         {
           status: data.status || 'pending',
           date: new Date().toISOString(),
-          by: '',
+          by: user.name || '',
         },
       ]),
       returnedDate: data.returnedDate ? new Date(data.returnedDate) : null,
@@ -141,7 +144,8 @@ export async function getCustomers(
   status?: string,
   dateFrom?: string,
   dateTo?: string,
-  viewAll?: boolean
+  viewAll?: boolean,
+  staffName?: string
 ) {
   const { userId, role } = await getUserRole()
 
@@ -176,6 +180,21 @@ export async function getCustomers(
     const endDate = toEndOfDay(dateTo)
     if (endDate) {
       conditions.push(lte(customers.receivedDate, endDate))
+    }
+  }
+
+  if (staffName) {
+    // Filter by the user account that created the order
+    const [staffUser] = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(and(eq(user.name, staffName), eq(user.status, 'approved')))
+      .limit(1)
+    if (staffUser) {
+      conditions.push(eq(customers.userId, staffUser.id))
+    } else {
+      // Fallback: no matching user found, match nothing
+      conditions.push(sql`1 = 0`)
     }
   }
 
@@ -214,6 +233,29 @@ export async function getCustomers(
   }
 }
 
+export async function getCustomerStaffNames(viewAll?: boolean) {
+  const { userId, role } = await getUserRole()
+  const canViewAll = role === 'admin' && viewAll === true
+
+  if (!canViewAll) {
+    // Non-admin: return only their own name
+    const [self] = await db.select({ name: user.name }).from(user).where(eq(user.id, userId))
+    return self?.name ? [self.name] : []
+  }
+
+  // Admin: return all active user accounts (approved staff + admins)
+  const rows = await db
+    .select({ name: user.name, id: user.id })
+    .from(user)
+    .where(eq(user.status, 'approved'))
+    .orderBy(user.name)
+
+  return rows
+    .filter((r) => r.name?.trim())
+    .map((r) => r.name!.trim())
+    .sort((a, b) => a.localeCompare(b, 'vi', { sensitivity: 'base' }))
+}
+
 export async function updateCustomer(
   id: number,
   data: {
@@ -231,6 +273,7 @@ export async function updateCustomer(
     notes?: string
     status?: string
     returnedDate?: string | null
+    returnedTime?: string | null
   }
 ) {
   const user = await requireAuth()
@@ -280,7 +323,7 @@ export async function updateCustomer(
     changedFields.push('repairedBy')
   }
   if (data.repairCost !== undefined) {
-    updates.repairCost = data.repairCost || null
+    updates.repairCost = data.repairCost !== undefined && data.repairCost !== '' && data.repairCost !== null ? data.repairCost : null
     changedFields.push('repairCost')
   }
   if (data.notes !== undefined) {
@@ -292,7 +335,12 @@ export async function updateCustomer(
     changedFields.push('status')
   }
   if (data.returnedDate !== undefined) {
-    updates.returnedDate = data.returnedDate ? new Date(data.returnedDate) : null
+    const returnedDateTime = data.returnedDate
+      ? data.returnedTime
+        ? `${data.returnedDate}T${data.returnedTime}:00+07:00`
+        : data.returnedDate
+      : null
+    updates.returnedDate = returnedDateTime ? new Date(returnedDateTime) : null
     changedFields.push('returnedDate')
   }
   updates.updatedAt = new Date()
@@ -317,7 +365,7 @@ export async function updateCustomer(
       statusHistory.push({
         status: data.status,
         date: new Date().toISOString(),
-        by: '',
+        by: user.name || '',
       })
       updates.statusHistory = JSON.stringify(statusHistory)
     }
@@ -347,21 +395,34 @@ export async function deleteCustomer(id: number) {
   const userId = user.id
   const isAdmin = user.role === 'admin'
 
-  await logActivity(user.id, user.name, 'delete_order', `id:${id}`)
-
   await db
     .delete(customers)
     .where(isAdmin ? eq(customers.id, id) : and(eq(customers.id, id), eq(customers.userId, userId)))
+
+  await logActivity(user.id, user.name, 'delete_order', `id:${id}`)
 
   revalidatePath('/dashboard')
   revalidatePath('/admin')
 }
 
-export async function getCustomerStats(viewAll?: boolean) {
+export async function getCustomerStats(viewAll?: boolean, staffName?: string) {
   const { userId, role } = await getUserRole()
 
-  // Admin with viewAll sees all stats; otherwise only own stats
-  const whereClause = (role === 'admin' && viewAll === true) ? undefined : eq(customers.userId, userId)
+  // Build where clause
+  let whereClause
+  if (staffName && role === 'admin') {
+    // Filter by specific staff user
+    const [staffUser] = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(and(eq(user.name, staffName), eq(user.status, 'approved')))
+      .limit(1)
+    whereClause = staffUser ? eq(customers.userId, staffUser.id) : sql`1 = 0`
+  } else if (role === 'admin' && viewAll === true) {
+    whereClause = undefined
+  } else {
+    whereClause = eq(customers.userId, userId)
+  }
 
   const rows = await db
     .select({

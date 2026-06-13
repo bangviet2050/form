@@ -23,14 +23,24 @@ export function CustomerHistoryDialog({
 }: CustomerHistoryDialogProps) {
   const [history, setHistory] = useState<Customer[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (open && customerName && phone) {
       setLoading(true)
-      getCustomerHistory(customerName, phone).then((data) => {
-        setHistory(data as Customer[])
-        setLoading(false)
-      })
+      setError(null)
+      setHistory([])
+
+      void (async () => {
+        try {
+          const result = await getCustomerHistory(customerName, phone)
+          setHistory(result as Customer[])
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Không thể tải lịch sử khách hàng')
+        } finally {
+          setLoading(false)
+        }
+      })()
     }
   }, [open, customerName, phone])
 
@@ -80,6 +90,12 @@ export function CustomerHistoryDialog({
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+        </div>
+      ) : error ? (
+        <div className="text-center py-12">
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            {error}
+          </p>
         </div>
       ) : history.length === 0 ? (
         <div className="text-center py-12">

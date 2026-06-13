@@ -3,7 +3,7 @@
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { customers, user } from '@/lib/db/schema'
-import { and, desc, eq, gte, lte, count, sum, sql, like } from 'drizzle-orm'
+import { and, desc, eq, gte, lte, count, sum, sql, like, or } from 'drizzle-orm'
 import ExcelJS from 'exceljs'
 
 async function requireAdmin() {
@@ -12,6 +12,11 @@ async function requireAdmin() {
     throw new Error('Chỉ admin mới có thể xem báo cáo')
   }
   return result.user
+}
+
+function sanitizeExcel(str: string | null | undefined) {
+  const value = str ?? ''
+  return /^[=+\-@]/.test(value) ? `'${value}` : value
 }
 
 // --- Revenue by month ---
@@ -271,16 +276,36 @@ export async function exportOrdersExcel(
   status?: string,
   dateFrom?: string,
   dateTo?: string,
-  staffId?: string
+  staffId?: string,
+  search?: string,
+  staffName?: string
 ) {
   const admin = await requireAdmin()
 
   const { logActivity } = await import('@/app/actions/activity-log')
-  void logActivity(admin.id, admin.name, 'export_report', 'Đơn hàng', `Status: ${status || 'all'}, From: ${dateFrom || 'all'}, To: ${dateTo || 'all'}`)
+  void logActivity(admin.id, admin.name, 'export_report', 'Đơn hàng', `Status: ${status || 'all'}, From: ${dateFrom || 'all'}, To: ${dateTo || 'all'}, Search: ${search || 'all'}, Staff: ${staffName || staffId || 'all'}`)
 
   const conditions: any[] = []
   if (status) conditions.push(eq(customers.status, status))
   if (staffId) conditions.push(eq(customers.userId, staffId))
+  if (search) {
+    conditions.push(
+      or(
+        like(customers.customerName, `%${search}%`),
+        like(customers.phone, `%${search}%`),
+        like(customers.ticketId, `%${search}%`)
+      )!
+    )
+  }
+  if (staffName) {
+    conditions.push(
+      or(
+        eq(customers.receivedBy, staffName),
+        eq(customers.repairedBy, staffName),
+        eq(user.name, staffName)
+      )!
+    )
+  }
   if (dateFrom) {
     const d = new Date(`${dateFrom}T00:00:00`)
     if (!Number.isNaN(d.getTime())) conditions.push(gte(customers.receivedDate, d))
@@ -347,7 +372,7 @@ export async function exportOrdersExcel(
   ]
 
   // Title row (row 1)
-  const titleRow = sheet.addRow(['DANH SÁCH ĐƠN HÀNG'])
+  const titleRow = sheet.addRow([sanitizeExcel('DANH SÁCH ĐƠN HÀNG')])
   titleRow.font = { bold: true, size: 16, color: { argb: 'FF1F4E79' } }
   titleRow.alignment = { horizontal: 'center', vertical: 'middle' }
   sheet.mergeCells('A1:P1')
@@ -355,7 +380,7 @@ export async function exportOrdersExcel(
 
   // Subtitle row (row 2)
   const subtitleRow = sheet.addRow([
-    `Xuất lúc: ${new Date().toLocaleString('vi-VN')}${status ? ` | Trạng thái: ${statusMap[status] || status}` : ''}${dateFrom ? ` | Từ: ${dateFrom}` : ''}${dateTo ? ` | Đến: ${dateTo}` : ''}`
+    sanitizeExcel(`Xuất lúc: ${new Date().toLocaleString('vi-VN')}${status ? ` | Trạng thái: ${statusMap[status] || status}` : ''}${dateFrom ? ` | Từ: ${dateFrom}` : ''}${dateTo ? ` | Đến: ${dateTo}` : ''}`)
   ])
   subtitleRow.font = { italic: true, size: 10, color: { argb: 'FF666666' } }
   subtitleRow.alignment = { horizontal: 'center' }
@@ -366,9 +391,9 @@ export async function exportOrdersExcel(
 
   // Header row (row 4)
   const headerRow = sheet.addRow([
-    'STT', 'Mã phiếu', 'Khách hàng', 'SĐT', 'Ngày nhận',
-    'Thiết bị', 'Model', 'Phụ kiện', 'Trước khi sửa', 'Sau khi sửa',
-    'Người nhận', 'Người sửa', 'Giá sửa (đ)', 'Trạng thái', 'Ngày trả', 'Ghi chú'
+    sanitizeExcel('STT'), sanitizeExcel('Mã phiếu'), sanitizeExcel('Khách hàng'), sanitizeExcel('SĐT'), sanitizeExcel('Ngày nhận'),
+    sanitizeExcel('Thiết bị'), sanitizeExcel('Model'), sanitizeExcel('Phụ kiện'), sanitizeExcel('Trước khi sửa'), sanitizeExcel('Sau khi sửa'),
+    sanitizeExcel('Người nhận'), sanitizeExcel('Người sửa'), sanitizeExcel('Giá sửa (đ)'), sanitizeExcel('Trạng thái'), sanitizeExcel('Ngày trả'), sanitizeExcel('Ghi chú')
   ])
   headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
   headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
@@ -393,21 +418,21 @@ export async function exportOrdersExcel(
     rowIndex++
     const newRow = sheet.addRow([
       rowIndex,
-      row.ticketId,
-      row.customerName,
-      row.phone,
-      row.receivedDate ? new Date(row.receivedDate).toLocaleDateString('vi-VN') : '',
-      row.deviceType,
-      row.deviceModel || '',
-      row.accessories || '',
-      row.conditionBefore || '',
-      row.conditionAfter || '',
-      row.receivedBy || '',
-      row.repairedBy || '',
+      sanitizeExcel(row.ticketId),
+      sanitizeExcel(row.customerName),
+      sanitizeExcel(row.phone),
+      row.receivedDate ? sanitizeExcel(new Date(row.receivedDate).toLocaleDateString('vi-VN')) : '',
+      sanitizeExcel(row.deviceType),
+      sanitizeExcel(row.deviceModel || ''),
+      sanitizeExcel(row.accessories || ''),
+      sanitizeExcel(row.conditionBefore || ''),
+      sanitizeExcel(row.conditionAfter || ''),
+      sanitizeExcel(row.receivedBy || ''),
+      sanitizeExcel(row.repairedBy || ''),
       row.repairCost ? Number(row.repairCost) : 0,
-      statusMap[row.status] || row.status,
-      row.returnedDate ? new Date(row.returnedDate).toLocaleDateString('vi-VN') : '',
-      row.notes || '',
+      sanitizeExcel(statusMap[row.status] || row.status),
+      row.returnedDate ? sanitizeExcel(new Date(row.returnedDate).toLocaleDateString('vi-VN')) : '',
+      sanitizeExcel(row.notes || ''),
     ])
 
     // Alternating row colors
@@ -424,7 +449,7 @@ export async function exportOrdersExcel(
     })
 
     // Status cell color
-    const statusLabel = statusMap[row.status] || row.status
+    const statusLabel = sanitizeExcel(statusMap[row.status] || row.status)
     const statusColor = statusColors[statusLabel]
     if (statusColor) {
       const statusCell = newRow.getCell(14) // column N = Trạng thái
@@ -450,8 +475,8 @@ export async function exportOrdersExcel(
   // Total row
   const totalRow = sheet.addRow([
     '', '', '', '', '', '', '', '', '', '', '', '',
-    { formula: `SUM(M5:M${sheet.rowCount})`, result: undefined as any },
-    `${rowIndex} đơn`, '', '',
+    { formula: `SUM(M5:M${sheet.rowCount - 1})`, result: undefined as any },
+    sanitizeExcel(`${rowIndex} đơn`), '', '',
   ])
   totalRow.font = { bold: true, size: 11, color: { argb: 'FF1F4E79' } }
   totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF4' } }
@@ -498,14 +523,14 @@ export async function exportRevenueExcel(year?: number) {
   ]
 
   // Title row (row 1)
-  const titleRow = sheet.addRow([`BÁO CÁO DOANH THU NĂM ${year || new Date().getFullYear()}`])
+  const titleRow = sheet.addRow([sanitizeExcel(`BÁO CÁO DOANH THU NĂM ${year || new Date().getFullYear()}`)])
   titleRow.font = { bold: true, size: 16, color: { argb: 'FF1F4E79' } }
   titleRow.alignment = { horizontal: 'center', vertical: 'middle' }
   sheet.mergeCells('A1:D1')
   titleRow.height = 32
 
   // Subtitle row (row 2)
-  const subtitleRow = sheet.addRow([`Xuất lúc: ${new Date().toLocaleString('vi-VN')}`])
+  const subtitleRow = sheet.addRow([sanitizeExcel(`Xuất lúc: ${new Date().toLocaleString('vi-VN')}`)])
   subtitleRow.font = { italic: true, size: 10, color: { argb: 'FF666666' } }
   subtitleRow.alignment = { horizontal: 'center' }
   sheet.mergeCells('A2:D2')
@@ -514,7 +539,7 @@ export async function exportRevenueExcel(year?: number) {
   sheet.addRow([])
 
   // Header row (row 4)
-  const headerRow = sheet.addRow(['Tháng', 'Số đơn', 'Đơn hoàn thành', 'Doanh thu (đ)'])
+  const headerRow = sheet.addRow([sanitizeExcel('Tháng'), sanitizeExcel('Số đơn'), sanitizeExcel('Đơn hoàn thành'), sanitizeExcel('Doanh thu (đ)')])
   headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
   headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
   headerRow.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
@@ -530,7 +555,7 @@ export async function exportRevenueExcel(year?: number) {
   for (const row of revenueData) {
     rowIndex++
     const newRow = sheet.addRow([
-      row.monthLabel,
+      sanitizeExcel(row.monthLabel),
       row.totalOrders,
       row.completedOrders,
       row.revenue,
@@ -567,7 +592,7 @@ export async function exportRevenueExcel(year?: number) {
 
   // Total row
   const totalRow = sheet.addRow([
-    'TỔNG CỘNG',
+    sanitizeExcel('TỔNG CỘNG'),
     revenueData.reduce((s: number, r: any) => s + r.totalOrders, 0),
     revenueData.reduce((s: number, r: any) => s + r.completedOrders, 0),
     revenueData.reduce((s: number, r: any) => s + r.revenue, 0),
@@ -624,14 +649,14 @@ export async function exportStaffPerformanceExcel() {
   ]
 
   // Title row (row 1)
-  const titleRow = sheet.addRow(['BÁO CÁO HIỆU SUẤT NHÂN VIÊN'])
+  const titleRow = sheet.addRow([sanitizeExcel('BÁO CÁO HIỆU SUẤT NHÂN VIÊN')])
   titleRow.font = { bold: true, size: 16, color: { argb: 'FF1F4E79' } }
   titleRow.alignment = { horizontal: 'center', vertical: 'middle' }
   sheet.mergeCells('A1:H1')
   titleRow.height = 32
 
   // Subtitle row (row 2)
-  const subtitleRow = sheet.addRow([`Xuất lúc: ${new Date().toLocaleString('vi-VN')}`])
+  const subtitleRow = sheet.addRow([sanitizeExcel(`Xuất lúc: ${new Date().toLocaleString('vi-VN')}`)])
   subtitleRow.font = { italic: true, size: 10, color: { argb: 'FF666666' } }
   subtitleRow.alignment = { horizontal: 'center' }
   sheet.mergeCells('A2:H2')
@@ -641,7 +666,7 @@ export async function exportStaffPerformanceExcel() {
 
   // Header row (row 4)
   const headerRow = sheet.addRow([
-    'STT', 'Nhân viên', 'Tổng đơn', 'Chờ sửa', 'Đang sửa', 'Đã xong', 'Đã trả', 'Doanh thu (đ)'
+    sanitizeExcel('STT'), sanitizeExcel('Nhân viên'), sanitizeExcel('Tổng đơn'), sanitizeExcel('Chờ sửa'), sanitizeExcel('Đang sửa'), sanitizeExcel('Đã xong'), sanitizeExcel('Đã trả'), sanitizeExcel('Doanh thu (đ)')
   ])
   headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
   headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } }
@@ -667,7 +692,7 @@ export async function exportStaffPerformanceExcel() {
     rowIndex++
     const newRow = sheet.addRow([
       rowIndex,
-      (row as any).staffName,
+      sanitizeExcel((row as any).staffName),
       (row as any).totalOrders,
       (row as any).pending,
       (row as any).repairing,
@@ -721,7 +746,7 @@ export async function exportStaffPerformanceExcel() {
   // Total row
   const totalRow = sheet.addRow([
     '',
-    'TỔNG CỘNG',
+    sanitizeExcel('TỔNG CỘNG'),
     staffData.reduce((s: number, r: any) => s + r.totalOrders, 0),
     staffData.reduce((s: number, r: any) => s + r.pending, 0),
     staffData.reduce((s: number, r: any) => s + r.repairing, 0),

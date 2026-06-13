@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { signIn, signUp } from '@/app/actions/auth'
@@ -19,44 +19,49 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
 
   const isSignUp = mode === 'sign-up'
 
-  // Check for error from OAuth callback in URL params
-  if (typeof window !== 'undefined') {
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const urlError = params.get('error')
-    if (urlError && !error) {
-      setError(decodeURIComponent(urlError))
+    const errorParam = params.get('error')
+
+    if (errorParam) {
+      setError(decodeURIComponent(errorParam))
+      window.history.replaceState({}, '', window.location.pathname)
     }
-  }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
-    const result = isSignUp
-      ? await signUp(email, password, name || email.split('@')[0])
-      : await signIn(email, password)
+    try {
+      const result = isSignUp
+        ? await signUp(email, password, name || email.split('@')[0])
+        : await signIn(email, password)
 
-    setLoading(false)
+      if (result.error) {
+        setError(result.error)
+        // If pending status, redirect to pending page
+        if ((result as any).status === 'pending') {
+          router.push('/pending')
+          return
+        }
+        return
+      }
 
-    if (result.error) {
-      setError(result.error)
-      // If pending status, redirect to pending page
+      // If sign-up returned pending status (no error but pending)
       if ((result as any).status === 'pending') {
         router.push('/pending')
         return
       }
-      return
-    }
 
-    // If sign-up returned pending status (no error but pending)
-    if ((result as any).status === 'pending') {
-      router.push('/pending')
-      return
+      router.push('/dashboard')
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Đã xảy ra lỗi')
+    } finally {
+      setLoading(false)
     }
-
-    router.push('/dashboard')
-    router.refresh()
   }
 
   const handleGoogleSignIn = () => {

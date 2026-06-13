@@ -9,7 +9,7 @@ export function getStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     pending: 'Chờ sửa',
     repairing: 'Đang sửa',
-    completed: 'Xong',
+    completed: 'Đã xong',
     returned: 'Đã trả máy',
   }
   return labels[status] || status

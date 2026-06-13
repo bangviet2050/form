@@ -49,7 +49,7 @@ function getStatusLabel(status: string) {
   const map: Record<string, string> = {
     pending: 'Chờ sửa',
     repairing: 'Đang sửa',
-    completed: 'Xong',
+    completed: 'Đã xong',
     returned: 'Đã trả máy',
   }
 
