@@ -14,6 +14,7 @@ import { getUsers, getUserStats, approveUser, rejectUser, changeUserRole, toggle
 import { DEFAULT_PERMISSIONS, type StaffPermissions } from '@/lib/permissions'
 import { getRevenueByMonth, getDeviceStats, getCompletionRate, getStaffPerformance, exportOrdersExcel, exportRevenueExcel, exportStaffPerformanceExcel, getReportData } from '@/app/actions/analytics'
 import { getActivityLogs, getActivityStats, deleteAllLogs } from '@/app/actions/activity-log'
+import { getCustomerStaffNames } from '@/app/actions/customers'
 import { Plus, Trash2, ArrowLeft, LogOut, Settings, Cpu, Smartphone, Cable, ClipboardList, ClipboardCheck, UserCheck, Wrench, Pencil, ChevronDown, ChevronRight, Users, UserPlus, Shield, ShieldCheck, XCircle, Trash, Loader2, Clock, Search, ChevronLeft, FileText, BarChart3, Download, Activity, Filter, KeyRound, FilePlus, UserX, UserMinus } from 'lucide-react'
 
 interface OptionItem {
@@ -88,6 +89,10 @@ export default function AdminPage() {
   const [logsUserFilter, setLogsUserFilter] = useState('')
   const [logsDateFrom, setLogsDateFrom] = useState('')
   const [logsDateTo, setLogsDateTo] = useState('')
+  // Staff filter for reports and logs (admin only)
+  const [adminStaffOptions, setAdminStaffOptions] = useState<string[]>([])
+  const [reportStaffFilter, setReportStaffFilter] = useState('')
+  const [logsStaffFilter, setLogsStaffFilter] = useState('')
   // Cache flags — don't reload data when switching back to same tab
   const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set())
   // Real-time refresh
@@ -118,6 +123,22 @@ export default function AdminPage() {
         return
       }
       setUser(userData ? { id: userData.id, name: userData.name, role: userData.role, canAddOptions: userData.canAddOptions, permissions: userData.permissions, avatar: userData.avatar } : null)
+
+      // Auto-select first visible tab for non-admin staff
+      if (userData && userData.role !== 'admin') {
+        let perms: StaffPermissions = DEFAULT_PERMISSIONS
+        try { perms = { ...DEFAULT_PERMISSIONS, ...JSON.parse(userData.permissions) } } catch {}
+        const canSeeOptions = userData.canAddOptions
+        const canSeeReports = perms.tabs.reports
+        const canSeeLogs = perms.tabs.logs
+        if (!canSeeOptions && !canSeeReports && !canSeeLogs) {
+          // No permissions at all — redirect back
+          router.push('/dashboard')
+        } else if (!canSeeOptions) {
+          // Default tab 'options' is hidden — switch to first available
+          setActiveTab(canSeeReports ? 'reports' : 'logs')
+        }
+      }
     })
   }, [])
 
@@ -147,16 +168,22 @@ export default function AdminPage() {
     }
     if (activeTab === 'reports') {
       loadReports()
+      if (isAdmin && adminStaffOptions.length === 0) {
+        getCustomerStaffNames(true).then(setAdminStaffOptions).catch(() => {})
+      }
     }
     if (activeTab === 'logs') {
       loadLogs()
+      if (isAdmin && adminStaffOptions.length === 0) {
+        getCustomerStaffNames(true).then(setAdminStaffOptions).catch(() => {})
+      }
     }
   }, [activeTab])
 
   // Reload reports when year changes
   useEffect(() => {
     if (activeTab === 'reports') {
-      loadReports()
+      loadReports(reportStaffFilter || undefined)
     }
   }, [reportYear])
 
@@ -206,7 +233,7 @@ export default function AdminPage() {
   // Silent refresh for logs tab
   const refreshLogs = async () => {
     try {
-      const result = await getActivityLogs(logsPage, 20, logsActionFilter || undefined, logsUserFilter || undefined, logsDateFrom || undefined, logsDateTo || undefined)
+      const result = await getActivityLogs(logsPage, 20, logsActionFilter || undefined, logsUserFilter || undefined, logsDateFrom || undefined, logsDateTo || undefined, logsStaffFilter || undefined)
       setLogs(result.data as any[])
       setLogsPages(result.totalPages)
       setLogsTotal(result.totalCount)
@@ -237,10 +264,10 @@ export default function AdminPage() {
     return () => window.removeEventListener('focus', onFocus)
   }, [activeTab, allOrdersPage, allOrdersSearch, allOrdersStatus, allOrdersStaff, logsPage, logsActionFilter])
 
-  const loadReports = async () => {
+  const loadReports = async (staffName?: string) => {
     setReportsLoading(true)
     try {
-      const data = await getReportData(reportYear)
+      const data = await getReportData(reportYear, staffName)
       setRevenueData(data.revenueData as any[])
       setDeviceStats(data.deviceStats as any[])
       setCompletionRate(data.completionRate as any)
@@ -252,10 +279,10 @@ export default function AdminPage() {
     }
   }
 
-  const loadLogs = async (page: number = 1, actionFilter: string = logsActionFilter, userFilter: string = logsUserFilter, dateFrom: string = logsDateFrom, dateTo: string = logsDateTo) => {
+  const loadLogs = async (page: number = 1, actionFilter: string = logsActionFilter, userFilter: string = logsUserFilter, dateFrom: string = logsDateFrom, dateTo: string = logsDateTo, staffName: string = logsStaffFilter) => {
     setLogsLoading(true)
     try {
-      const result = await getActivityLogs(page, 20, actionFilter || undefined, userFilter || undefined, dateFrom || undefined, dateTo || undefined)
+      const result = await getActivityLogs(page, 20, actionFilter || undefined, userFilter || undefined, dateFrom || undefined, dateTo || undefined, staffName)
       setLogs(result.data as any[])
       setLogsPages(result.totalPages)
       setLogsPage(result.page)
@@ -1538,7 +1565,7 @@ export default function AdminPage() {
             </div>
           ) : (
             <>
-              {/* Export buttons */}
+              {/* Export buttons + filters */}
               <div className="flex flex-wrap items-center gap-3 mb-6">
                 <Button onClick={() => handleExport('orders')} variant="outline" size="sm" className="gap-1.5">
                   <Download className="h-4 w-4" /> Xuất đơn hàng
@@ -1546,10 +1573,32 @@ export default function AdminPage() {
                 <Button onClick={() => handleExport('revenue')} variant="outline" size="sm" className="gap-1.5">
                   <Download className="h-4 w-4" /> Xuất doanh thu
                 </Button>
+                {isAdmin && (
                 <Button onClick={() => handleExport('staff')} variant="outline" size="sm" className="gap-1.5">
                   <Download className="h-4 w-4" /> Xuất hiệu suất NV
                 </Button>
+                )}
                 <div className="flex-1" />
+                {isAdmin && adminStaffOptions.length > 0 && (
+                <select
+                  value={reportStaffFilter}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setReportStaffFilter(val)
+                    loadReports(val || undefined)
+                  }}
+                  className="h-9 rounded-md border border-gray-200 px-3 text-sm bg-white cursor-pointer"
+                  aria-label="Xem báo cáo theo"
+                >
+                  <option value="">Tất cả nhân viên</option>
+                  <option value="__mine__">Của tôi</option>
+                  <optgroup label="─ Nhân viên ─">
+                    {adminStaffOptions.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </optgroup>
+                </select>
+                )}
                 <select
                   value={reportYear}
                   onChange={(e) => { setReportYear(Number(e.target.value)); loadReports() }}
@@ -1654,12 +1703,13 @@ export default function AdminPage() {
                 </Card>
               </div>
 
-              {/* Staff performance */}
+              {/* Staff performance — admin only */}
+              {isAdmin && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Users className="h-5 w-5 text-indigo-600" />
-                    Hiệu suất nhân viên
+                    {reportStaffFilter === '__mine__' ? 'Hiệu suất của tôi' : reportStaffFilter ? `Hiệu suất: ${reportStaffFilter}` : 'Hiệu suất nhân viên'}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1696,6 +1746,7 @@ export default function AdminPage() {
                   </div>
                 </CardContent>
               </Card>
+              )}
             </>
           )}
         </div>
@@ -1709,7 +1760,27 @@ export default function AdminPage() {
               <p className="text-xs text-gray-400 mt-0.5">Theo dõi mọi thao tác trong hệ thống</p>
             </div>
             <div className="flex items-center gap-3">
-              {logsTotal > 0 && (
+              {isAdmin && adminStaffOptions.length > 0 && (
+                <select
+                  value={logsStaffFilter}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setLogsStaffFilter(val)
+                    loadLogs(1, logsActionFilter, '', logsDateFrom, logsDateTo, val || undefined)
+                  }}
+                  className="h-8 rounded-md border border-gray-200 px-2 text-xs bg-white cursor-pointer"
+                  aria-label="Xem nhật ký theo"
+                >
+                  <option value="">Tất cả nhân viên</option>
+                  <option value="__mine__">Của tôi</option>
+                  <optgroup label="─ Nhân viên ─">
+                    {adminStaffOptions.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              )}
+              {logsTotal > 0 && isAdmin && (
                 <Button
                   size="sm"
                   variant="destructive"
@@ -1845,7 +1916,7 @@ export default function AdminPage() {
                   </span>
                 )}
                 <button
-                  onClick={() => { setLogsActionFilter(''); setLogsUserFilter(''); setLogsDateFrom(''); setLogsDateTo(''); loadLogs(1, '', '', '', '') }}
+                  onClick={() => { setLogsActionFilter(''); setLogsUserFilter(''); setLogsDateFrom(''); setLogsDateTo(''); setLogsStaffFilter(''); loadLogs(1, '', '', '', '', '') }}
                   className="text-[11px] text-red-500 hover:text-red-700 font-medium"
                 >
                   Xóa tất cả
@@ -1865,7 +1936,7 @@ export default function AdminPage() {
                 <>
                   <Search className="h-10 w-10 text-gray-200 mx-auto mb-3" />
                   <p className="text-gray-400 text-sm mb-2">Không tìm thấy hoạt động phù hợp</p>
-                  <Button variant="outline" size="sm" onClick={() => { setLogsActionFilter(''); setLogsUserFilter(''); setLogsDateFrom(''); setLogsDateTo(''); loadLogs(1, '', '', '', '') }}>
+                  <Button variant="outline" size="sm" onClick={() => { setLogsActionFilter(''); setLogsUserFilter(''); setLogsDateFrom(''); setLogsDateTo(''); setLogsStaffFilter(''); loadLogs(1, '', '', '', '', '') }}>
                     Xóa bộ lọc
                   </Button>
                 </>

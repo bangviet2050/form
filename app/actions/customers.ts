@@ -205,25 +205,45 @@ export async function getCustomers(
       ? desc(customers.createdAt)
       : customers.customerName
 
-  const totalResult = await db
-    .select({ total: count() })
-    .from(customers)
-    .where(whereClause)
-
-  const totalCount = Number(totalResult[0]?.total || 0)
   const usePagination = typeof limit === 'number' && limit > 0
   const pageSize = limit ?? 0
-  const totalPages = usePagination ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1
 
-  const baseQuery = db
-    .select()
+  // Single query with window function — avoids separate count query
+  const rows = await db
+    .select({
+      id: customers.id,
+      userId: customers.userId,
+      ticketId: customers.ticketId,
+      customerName: customers.customerName,
+      phone: customers.phone,
+      receivedDate: customers.receivedDate,
+      deviceType: customers.deviceType,
+      deviceModel: customers.deviceModel,
+      accessories: customers.accessories,
+      conditionBefore: customers.conditionBefore,
+      conditionAfter: customers.conditionAfter,
+      receivedBy: customers.receivedBy,
+      repairedBy: customers.repairedBy,
+      repairCost: customers.repairCost,
+      notes: customers.notes,
+      status: customers.status,
+      statusHistory: customers.statusHistory,
+      returnedDate: customers.returnedDate,
+      createdAt: customers.createdAt,
+      updatedAt: customers.updatedAt,
+      totalCount: sql<number>`count(*) over()`,
+    })
     .from(customers)
     .where(whereClause)
     .orderBy(orderBy)
+    .limit(usePagination ? pageSize : 999999)
+    .offset(usePagination ? (page - 1) * pageSize : 0)
 
-  const data = usePagination
-    ? await baseQuery.limit(pageSize).offset((page - 1) * pageSize)
-    : await baseQuery
+  const totalCount = Number((rows[0] as any)?.totalCount || 0)
+  const totalPages = usePagination ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1
+
+  // Strip totalCount from rows for clean data
+  const data = rows.map(({ totalCount: _, ...rest }) => rest)
 
   return {
     data,
@@ -243,11 +263,11 @@ export async function getCustomerStaffNames(viewAll?: boolean) {
     return self?.name ? [self.name] : []
   }
 
-  // Admin: return all active user accounts (approved staff + admins)
+  // Admin: return all active staff accounts (exclude admins)
   const rows = await db
     .select({ name: user.name, id: user.id })
     .from(user)
-    .where(eq(user.status, 'approved'))
+    .where(and(eq(user.status, 'approved'), eq(user.role, 'staff')))
     .orderBy(user.name)
 
   return rows

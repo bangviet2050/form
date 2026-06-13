@@ -14,6 +14,20 @@ async function requireAdmin() {
   return result.user
 }
 
+async function requireAdminOrReportsPerm() {
+  const result = await getSession()
+  if (!result?.user) {
+    throw new Error('Unauthorized')
+  }
+  if (result.user.role === 'admin') return { user: result.user, isStaff: false }
+  // Check if staff has reports tab permission
+  try {
+    const perms = result.user.permissions ? JSON.parse(result.user.permissions) : {}
+    if (perms?.tabs?.reports) return { user: result.user, isStaff: true }
+  } catch {}
+  throw new Error('Chỉ admin mới có thể xem báo cáo')
+}
+
 function sanitizeExcel(str: string | null | undefined) {
   const value = str ?? ''
   return /^[=+\-@]/.test(value) ? `'${value}` : value
@@ -21,11 +35,14 @@ function sanitizeExcel(str: string | null | undefined) {
 
 // --- Revenue by month ---
 export async function getRevenueByMonth(year?: number) {
-  await requireAdmin()
+  const { user: caller, isStaff } = await requireAdminOrReportsPerm()
 
   const y = year || new Date().getFullYear()
   const startDate = new Date(y, 0, 1)
   const endDate = new Date(y, 11, 31, 23, 59, 59)
+
+  const baseConditions = [gte(customers.receivedDate, startDate), lte(customers.receivedDate, endDate)]
+  if (isStaff) baseConditions.push(eq(customers.userId, caller.id))
 
   const rows = await db
     .select({
@@ -35,7 +52,7 @@ export async function getRevenueByMonth(year?: number) {
       completedOrders: sum(sql`CASE WHEN ${customers.status} IN ('completed', 'returned') THEN 1 ELSE 0 END`),
     })
     .from(customers)
-    .where(and(gte(customers.receivedDate, startDate), lte(customers.receivedDate, endDate)))
+    .where(and(...baseConditions))
     .groupBy(sql`EXTRACT(MONTH FROM ${customers.receivedDate})`)
     .orderBy(sql`EXTRACT(MONTH FROM ${customers.receivedDate})`)
 
@@ -56,10 +73,13 @@ export async function getRevenueByMonth(year?: number) {
 
 // --- Revenue by week (last 12 weeks) ---
 export async function getRevenueByWeek() {
-  await requireAdmin()
+  const { user: caller, isStaff } = await requireAdminOrReportsPerm()
 
   const now = new Date()
   const twelveWeeksAgo = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000)
+
+  const conditions: any[] = [gte(customers.receivedDate, twelveWeeksAgo)]
+  if (isStaff) conditions.push(eq(customers.userId, caller.id))
 
   const rows = await db
     .select({
@@ -69,7 +89,7 @@ export async function getRevenueByWeek() {
       revenue: sum(sql`CASE WHEN ${customers.status} = 'returned' THEN ${customers.repairCost} ELSE 0 END`),
     })
     .from(customers)
-    .where(gte(customers.receivedDate, twelveWeeksAgo))
+    .where(conditions.length > 1 ? and(...conditions) : conditions[0])
     .groupBy(sql`EXTRACT(YEAR FROM ${customers.receivedDate})`, sql`EXTRACT(WEEK FROM ${customers.receivedDate})`)
     .orderBy(sql`EXTRACT(YEAR FROM ${customers.receivedDate})`, sql`EXTRACT(WEEK FROM ${customers.receivedDate})`)
 
@@ -84,7 +104,7 @@ export async function getRevenueByWeek() {
 
 // --- Device type stats ---
 export async function getDeviceStats() {
-  await requireAdmin()
+  const { user: caller, isStaff } = await requireAdminOrReportsPerm()
 
   const rows = await db
     .select({
@@ -93,6 +113,7 @@ export async function getDeviceStats() {
       revenue: sum(sql`CASE WHEN ${customers.status} = 'returned' THEN ${customers.repairCost} ELSE 0 END`),
     })
     .from(customers)
+    .where(isStaff ? eq(customers.userId, caller.id) : undefined)
     .groupBy(customers.deviceType)
     .orderBy(desc(count()))
 
@@ -105,7 +126,7 @@ export async function getDeviceStats() {
 
 // --- Completion rate ---
 export async function getCompletionRate() {
-  await requireAdmin()
+  const { user: caller, isStaff } = await requireAdminOrReportsPerm()
 
   const rows = await db
     .select({
@@ -116,6 +137,7 @@ export async function getCompletionRate() {
       returned: sum(sql`CASE WHEN ${customers.status} = 'returned' THEN 1 ELSE 0 END`),
     })
     .from(customers)
+    .where(isStaff ? eq(customers.userId, caller.id) : undefined)
 
   const r = rows[0]
   const total = Number(r?.total || 0)
@@ -132,7 +154,7 @@ export async function getCompletionRate() {
 
 // --- Staff performance ---
 export async function getStaffPerformance() {
-  await requireAdmin()
+  const { user: caller, isStaff } = await requireAdminOrReportsPerm()
 
   const rows = await db
     .select({
@@ -148,6 +170,7 @@ export async function getStaffPerformance() {
     })
     .from(customers)
     .leftJoin(user, eq(customers.userId, user.id))
+    .where(isStaff ? eq(customers.userId, caller.id) : undefined)
     .groupBy(customers.userId, user.name, user.email)
     .orderBy(desc(count()))
 
@@ -164,12 +187,30 @@ export async function getStaffPerformance() {
 }
 
 // --- Combined report data loader (single requireAdmin check) ---
-export async function getReportData(year?: number) {
-  await requireAdmin()
+export async function getReportData(year?: number, staffName?: string) {
+  const { user: caller, isStaff } = await requireAdminOrReportsPerm()
 
   const y = year || new Date().getFullYear()
   const startDate = new Date(y, 0, 1)
   const endDate = new Date(y, 11, 31, 23, 59, 59)
+
+  // Determine userId filter: staff always sees own data; admin can filter by staff name
+  let staffUserId: string | undefined
+  if (isStaff) {
+    staffUserId = caller.id
+  } else if (staffName) {
+    if (staffName === '__mine__') {
+      staffUserId = caller.id
+    } else {
+      const [staffUser] = await db
+        .select({ id: user.id })
+        .from(user)
+        .where(and(eq(user.name, staffName), eq(user.status, 'approved')))
+        .limit(1)
+      staffUserId = staffUser?.id
+    }
+  }
+  const staffFilter = staffUserId ? eq(customers.userId, staffUserId) : undefined
 
   const [revenueRows, deviceRows, completionRows, staffRows] = await Promise.all([
     // Revenue by month
@@ -181,7 +222,7 @@ export async function getReportData(year?: number) {
         completedOrders: sum(sql`CASE WHEN ${customers.status} IN ('completed', 'returned') THEN 1 ELSE 0 END`),
       })
       .from(customers)
-      .where(and(gte(customers.receivedDate, startDate), lte(customers.receivedDate, endDate)))
+      .where(staffFilter ? and(staffFilter, gte(customers.receivedDate, startDate), lte(customers.receivedDate, endDate)) : and(gte(customers.receivedDate, startDate), lte(customers.receivedDate, endDate)))
       .groupBy(sql`EXTRACT(MONTH FROM ${customers.receivedDate})`)
       .orderBy(sql`EXTRACT(MONTH FROM ${customers.receivedDate})`),
     // Device stats
@@ -192,6 +233,7 @@ export async function getReportData(year?: number) {
         revenue: sum(sql`CASE WHEN ${customers.status} = 'returned' THEN ${customers.repairCost} ELSE 0 END`),
       })
       .from(customers)
+      .where(staffFilter)
       .groupBy(customers.deviceType)
       .orderBy(desc(count())),
     // Completion rate
@@ -203,7 +245,8 @@ export async function getReportData(year?: number) {
         completed: sum(sql`CASE WHEN ${customers.status} = 'completed' THEN 1 ELSE 0 END`),
         returned: sum(sql`CASE WHEN ${customers.status} = 'returned' THEN 1 ELSE 0 END`),
       })
-      .from(customers),
+      .from(customers)
+      .where(staffFilter),
     // Staff performance
     db
       .select({
@@ -219,6 +262,7 @@ export async function getReportData(year?: number) {
       })
       .from(customers)
       .leftJoin(user, eq(customers.userId, user.id))
+      .where(staffFilter)
       .groupBy(customers.userId, user.name, user.email)
       .orderBy(desc(count())),
   ])
@@ -280,12 +324,13 @@ export async function exportOrdersExcel(
   search?: string,
   staffName?: string
 ) {
-  const admin = await requireAdmin()
+  const { user: caller, isStaff } = await requireAdminOrReportsPerm()
 
   const { logActivity } = await import('@/app/actions/activity-log')
-  void logActivity(admin.id, admin.name, 'export_report', 'Đơn hàng', `Status: ${status || 'all'}, From: ${dateFrom || 'all'}, To: ${dateTo || 'all'}, Search: ${search || 'all'}, Staff: ${staffName || staffId || 'all'}`)
+  void logActivity(caller.id, caller.name, 'export_report', 'Đơn hàng', `Status: ${status || 'all'}, From: ${dateFrom || 'all'}, To: ${dateTo || 'all'}, Search: ${search || 'all'}, Staff: ${staffName || staffId || 'all'}`)
 
   const conditions: any[] = []
+  if (isStaff) conditions.push(eq(customers.userId, caller.id))
   if (status) conditions.push(eq(customers.status, status))
   if (staffId) conditions.push(eq(customers.userId, staffId))
   if (search) {
@@ -504,10 +549,10 @@ export async function exportOrdersExcel(
 
 // --- Excel Export: Revenue ---
 export async function exportRevenueExcel(year?: number) {
-  const admin = await requireAdmin()
+  const { user: caller, isStaff } = await requireAdminOrReportsPerm()
 
   const { logActivity } = await import('@/app/actions/activity-log')
-  void logActivity(admin.id, admin.name, 'export_report', 'Doanh thu', `Year: ${year || new Date().getFullYear()}`)
+  void logActivity(caller.id, caller.name, 'export_report', 'Doanh thu', `Year: ${year || new Date().getFullYear()}`)
 
   const revenueData = await getRevenueByMonth(year)
 
@@ -626,10 +671,10 @@ export async function exportRevenueExcel(year?: number) {
 
 // --- Excel Export: Staff Performance ---
 export async function exportStaffPerformanceExcel() {
-  const admin = await requireAdmin()
+  const { user: caller, isStaff } = await requireAdminOrReportsPerm()
 
   const { logActivity } = await import('@/app/actions/activity-log')
-  void logActivity(admin.id, admin.name, 'export_report', 'Hiệu suất nhân viên')
+  void logActivity(caller.id, caller.name, 'export_report', 'Hiệu suất nhân viên')
 
   const staffData = await getStaffPerformance()
 

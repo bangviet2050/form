@@ -2,8 +2,8 @@
 
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { activityLog } from '@/lib/db/schema'
-import { desc, eq, and, gte, lte, count } from 'drizzle-orm'
+import { activityLog, user } from '@/lib/db/schema'
+import { desc, eq, and, gte, lte, count, sql } from 'drizzle-orm'
 
 export type ActionType =
   | 'create_order'
@@ -40,6 +40,20 @@ export async function logActivity(
   }
 }
 
+async function requireAdminOrLogsPerm() {
+  const result = await getSession()
+  if (!result?.user) {
+    throw new Error('Unauthorized')
+  }
+  if (result.user.role === 'admin') return { user: result.user, isStaff: false }
+  // Check if staff has logs tab permission
+  try {
+    const perms = result.user.permissions ? JSON.parse(result.user.permissions) : {}
+    if (perms?.tabs?.logs) return { user: result.user, isStaff: true }
+  } catch {}
+  throw new Error('Chỉ admin mới có thể thực hiện thao tác này')
+}
+
 async function requireAdmin() {
   const result = await getSession()
   if (!result?.user || result.user.role !== 'admin') {
@@ -54,19 +68,42 @@ export async function getActivityLogs(
   actionFilter?: string,
   userIdFilter?: string,
   dateFrom?: string,
-  dateTo?: string
+  dateTo?: string,
+  staffName?: string
 ) {
-  const admin = await requireAdmin()
-  void admin
+  const { user: caller, isStaff } = await requireAdminOrLogsPerm()
 
   const conditions: any[] = []
+
+  // Staff can only see their own logs
+  if (isStaff) {
+    conditions.push(eq(activityLog.userId, caller.id))
+  }
 
   if (actionFilter) {
     conditions.push(eq(activityLog.action, actionFilter))
   }
 
-  if (userIdFilter) {
+  if (userIdFilter && !isStaff) {
     conditions.push(eq(activityLog.userId, userIdFilter))
+  }
+
+  // Filter by staff name (admin only)
+  if (staffName && !isStaff) {
+    if (staffName === '__mine__') {
+      conditions.push(eq(activityLog.userId, caller.id))
+    } else {
+      const [staffUser] = await db
+        .select({ id: user.id })
+        .from(user)
+        .where(and(eq(user.name, staffName), eq(user.status, 'approved')))
+        .limit(1)
+      if (staffUser) {
+        conditions.push(eq(activityLog.userId, staffUser.id))
+      } else {
+        conditions.push(sql`1 = 0`)
+      }
+    }
   }
 
   if (dateFrom) {
@@ -111,14 +148,30 @@ export async function deleteAllLogs() {
   await db.delete(activityLog)
 }
 
-export async function getActivityStats() {
-  const admin = await requireAdmin()
-  void admin
+export async function getActivityStats(staffName?: string) {
+  const { user: caller, isStaff } = await requireAdminOrLogsPerm()
+
+  let staffFilter: any = isStaff ? eq(activityLog.userId, caller.id) : undefined
+
+  // Admin filter by staff name
+  if (!isStaff && staffName) {
+    if (staffName === '__mine__') {
+      staffFilter = eq(activityLog.userId, caller.id)
+    } else {
+      const [staffUser] = await db
+        .select({ id: user.id })
+        .from(user)
+        .where(and(eq(user.name, staffName), eq(user.status, 'approved')))
+        .limit(1)
+      staffFilter = staffUser ? eq(activityLog.userId, staffUser.id) : sql`1 = 0`
+    }
+  }
 
   // Get total count
   const totalResult = await db
     .select({ total: count() })
     .from(activityLog)
+    .where(staffFilter)
 
   // Get counts by action type
   const actionCounts = await db
@@ -127,6 +180,7 @@ export async function getActivityStats() {
       count: count(),
     })
     .from(activityLog)
+    .where(staffFilter)
     .groupBy(activityLog.action)
 
   return {

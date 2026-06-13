@@ -90,7 +90,7 @@ export default function DashboardPage() {
   const [printingCustomer, setPrintingCustomer] = useState<Customer | null>(null)
   const [printOpen, setPrintOpen] = useState(false)
   const [statusHistoryCustomer, setStatusHistoryCustomer] = useState<Customer | null>(null)
-  const [user, setUser] = useState<{ name: string; email: string; role: string; status: string; avatar?: string | null } | null>(null)
+  const [user, setUser] = useState<{ name: string; email: string; role: string; status: string; avatar?: string | null; canAddOptions?: boolean; permissions?: string | null } | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
@@ -115,25 +115,28 @@ export default function DashboardPage() {
   ) => {
     try {
       setLoading(true)
-      const [result, statsData] = await Promise.all([
-        getCustomers(
-          search || undefined,
-          'recent',
-          page,
-          13,
-          status || undefined,
-          fromDate || undefined,
-          toDate || undefined,
-          showAll || undefined,
-          staffName || undefined
-        ),
-        getCustomerStats(showAll || undefined, staffName || undefined),
-      ])
+      // Load data first — show results immediately
+      const result = await getCustomers(
+        search || undefined,
+        'recent',
+        page,
+        13,
+        status || undefined,
+        fromDate || undefined,
+        toDate || undefined,
+        showAll || undefined,
+        staffName || undefined
+      )
       setCustomers(result.data)
       setTotalPages(result.totalPages)
       setCurrentPage(result.page)
-      setStats(statsData)
       setLastUpdated(new Date())
+
+      // Load stats in background — don't block UI
+      getCustomerStats(showAll || undefined, staffName || undefined).then((statsData) => {
+        setStats(statsData)
+      }).catch(() => {})
+
     } catch (error: unknown) {
       console.error('Error loading data:', error instanceof Error ? error.message : 'Unknown error')
       toast.error('Lỗi tải dữ liệu. Vui lòng thử lại.')
@@ -162,24 +165,25 @@ export default function DashboardPage() {
 
   const silentRefresh = async () => {
     try {
-      const [result, statsData] = await Promise.all([
-        getCustomers(
-          searchQuery || undefined,
-          'recent',
-          currentPage,
-          13,
-          statusFilter || undefined,
-          dateFrom || undefined,
-          dateTo || undefined,
-          viewAll || undefined,
-          staffFilter || undefined
-        ),
-        getCustomerStats(viewAll || undefined, staffFilter || undefined),
-      ])
+      const result = await getCustomers(
+        searchQuery || undefined,
+        'recent',
+        currentPage,
+        13,
+        statusFilter || undefined,
+        dateFrom || undefined,
+        dateTo || undefined,
+        viewAll || undefined,
+        staffFilter || undefined
+      )
       setCustomers(result.data)
       setTotalPages(result.totalPages)
-      setStats(statsData)
       setLastUpdated(new Date())
+
+      // Stats in background
+      getCustomerStats(viewAll || undefined, staffFilter || undefined).then((statsData) => {
+        setStats(statsData)
+      }).catch(() => {})
     } catch {
       // silent — keep existing data
     }
@@ -210,7 +214,7 @@ export default function DashboardPage() {
           })
           return
         }
-        setUser({ name: userData.name || '', email: userData.email, role: userData.role, status: userData.status, avatar: userData.avatar })
+        setUser({ name: userData.name || '', email: userData.email, role: userData.role, status: userData.status, avatar: userData.avatar, canAddOptions: userData.canAddOptions, permissions: userData.permissions })
         // Preload staff options for admin
         if (userData.role === 'admin') {
           getCustomerStaffNames(true).then(setStaffOptions).catch(() => {})
@@ -220,18 +224,24 @@ export default function DashboardPage() {
     ]).catch(() => {})
   }, [])
 
+  // Auto-refresh: admin 3s, staff 5s
   useEffect(() => {
-    if (user?.role !== 'admin' || !viewAll) return
-    const interval = setInterval(() => { void silentRefresh() }, 8000)
+    const intervalMs = user?.role === 'admin' ? 3000 : 5000
+    const interval = setInterval(() => { void silentRefresh() }, intervalMs)
     return () => clearInterval(interval)
-  }, [viewAll, user?.role, currentPage, statusFilter, dateFrom, dateTo, searchQuery, staffFilter])
+  }, [user?.role, currentPage, statusFilter, dateFrom, dateTo, searchQuery, staffFilter, viewAll])
 
+  // Refresh on tab focus
   useEffect(() => {
-    if (user?.role !== 'admin' || !viewAll) return
     const onFocus = () => { void silentRefresh() }
+    const onVisible = () => { if (document.visibilityState === 'visible') void silentRefresh() }
     window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [viewAll, user?.role, currentPage, statusFilter, dateFrom, dateTo, searchQuery, staffFilter])
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [currentPage, statusFilter, dateFrom, dateTo, searchQuery, staffFilter, viewAll])
 
   useEffect(() => () => {
     clearSearchDebounce()
@@ -391,7 +401,6 @@ export default function DashboardPage() {
     setViewAll(next)
     if (!next) {
       setStaffFilter('')
-      setStaffOptions([])
     }
     if (next) {
       try {
@@ -401,9 +410,13 @@ export default function DashboardPage() {
         setStaffOptions([])
       }
     }
-    const nextStaff = next ? (staffName !== undefined ? staffName : staffFilter) : ''
-    if (staffName !== undefined) {
+    // Determine staff filter: explicit staffName, or clear if switching to "all" or "mine"
+    let nextStaff = ''
+    if (next && staffName !== undefined) {
+      nextStaff = staffName
       setStaffFilter(staffName)
+    } else {
+      setStaffFilter('')
     }
     setCurrentPage(1)
     await loadData(1, searchQuery, statusFilter, dateFrom, dateTo, next, nextStaff)
@@ -457,6 +470,18 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {(() => {
+                const isAdmin = user?.role === 'admin'
+                const canAdd = user?.canAddOptions === true
+                let canSeeReports = false
+                let canSeeLogs = false
+                try {
+                  const perms = user?.permissions ? JSON.parse(user.permissions) : {}
+                  canSeeReports = !!perms?.tabs?.reports
+                  canSeeLogs = !!perms?.tabs?.logs
+                } catch {}
+                const canAccessAdmin = isAdmin || canAdd || canSeeReports || canSeeLogs
+                return canAccessAdmin ? (
               <Button
                 onClick={() => router.push('/admin')}
                 variant="ghost"
@@ -464,8 +489,10 @@ export default function DashboardPage() {
                 className="text-slate-600 hover:text-slate-900 gap-1.5"
               >
                 <Settings className="h-4 w-4" />
-                <span className="hidden sm:inline">Quản trị</span>
+                <span className="hidden sm:inline">{isAdmin ? 'Quản trị' : 'Tùy chọn'}</span>
               </Button>
+                ) : null
+              })()}
               <div className="h-5 w-px bg-slate-200" />
               <div className="flex items-center gap-2 px-2">
                 {user?.avatar ? (

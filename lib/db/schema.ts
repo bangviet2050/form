@@ -80,6 +80,9 @@ export const customers = pgTable(
     userIdIdx: index('customers_userId_idx').on(table.userId),
     statusIdx: index('customers_status_idx').on(table.status),
     createdAtIdx: index('customers_createdAt_idx').on(table.createdAt),
+    customerNameIdx: index('customers_customerName_idx').on(table.customerName),
+    phoneIdx: index('customers_phone_idx').on(table.phone),
+    ticketIdIdx: index('customers_ticketId_idx').on(table.ticketId),
   })
 )
 
