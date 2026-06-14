@@ -73,7 +73,19 @@ export function CustomerTable({
   const selectAllRef = useRef<HTMLInputElement>(null)
   const [inlineSuggestOpen, setInlineSuggestOpen] = useState(false)
   const [inlineHighlightIdx, setInlineHighlightIdx] = useState(-1)
-  const [suggestPos, setSuggestPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [suggestPos, setSuggestPos] = useState<{ top: number; left: number; width: number; upward: boolean } | null>(null)
+
+  const calcSuggestPos = (rect: DOMRect) => {
+    const dropdownHeight = 160
+    const spaceBelow = window.innerHeight - rect.bottom
+    const upward = spaceBelow < dropdownHeight && rect.top > dropdownHeight
+    setSuggestPos({
+      top: upward ? rect.top - 4 : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      upward,
+    })
+  }
   const userTypingRef = useRef(false)
   const ignoreBlurRef = useRef(false)
 
@@ -117,7 +129,7 @@ export function CustomerTable({
       }
       // Calculate position for fixed suggestion dropdown
       const rect = inputRef.current.getBoundingClientRect()
-      setSuggestPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+      calcSuggestPos(rect)
     }
   }, [editingCell])
 
@@ -130,7 +142,7 @@ export function CustomerTable({
     if (!inlineSuggestOpen || !inputRef.current) return
     const update = () => {
       const rect = inputRef.current?.getBoundingClientRect()
-      if (rect) setSuggestPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+      if (rect) calcSuggestPos(rect)
     }
     update()
     window.addEventListener('scroll', update, true)
@@ -144,9 +156,12 @@ export function CustomerTable({
   // Fixed-position suggestion dropdown rendered via portal to body
   const renderSuggestDropdown = (items: string[]) => {
     if (!inlineSuggestOpen || items.length === 0 || !suggestPos) return null
+    const posStyle: React.CSSProperties = suggestPos.upward
+      ? { position: 'fixed', bottom: window.innerHeight - suggestPos.top, left: suggestPos.left, width: suggestPos.width, zIndex: 9999 }
+      : { position: 'fixed', top: suggestPos.top, left: suggestPos.left, width: suggestPos.width, zIndex: 9999 }
     return createPortal(
       <div
-        style={{ position: 'fixed', top: suggestPos.top, left: suggestPos.left, width: suggestPos.width, zIndex: 9999 }}
+        style={posStyle}
         className="flex flex-col max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
       >
         {items.map((s, i) => (
