@@ -374,7 +374,7 @@ export function CustomerForm({
                     value={formData.deviceType}
                     onChange={handleChange}
                     required
-                    placeholder="iPhone..."
+                    placeholder="Dell, HP..."
                     suggestions={suggestions.deviceType}
                   />
                 </div>
@@ -385,7 +385,7 @@ export function CustomerForm({
                     name="deviceModel"
                     value={formData.deviceModel}
                     onChange={handleChange}
-                    placeholder="13 Pro..."
+                    placeholder="3040, 5550..."
                     suggestions={getFilteredModels()}
                   />
                 </div>
