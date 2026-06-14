@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { logActivity } from '@/app/actions/activity-log'
 import { customers, user } from '@/lib/db/schema'
-import { and, desc, eq, gte, like, lte, or, count, sum, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, ilike, lte, or, count, sum, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
 async function requireAuth() {
@@ -158,9 +158,9 @@ export async function getCustomers(
   if (search) {
     conditions.push(
       or(
-        like(customers.customerName, `%${search}%`),
-        like(customers.phone, `%${search}%`),
-        like(customers.ticketId, `%${search}%`)
+        ilike(customers.customerName, `%${search}%`),
+        ilike(customers.phone, `%${search}%`),
+        ilike(customers.ticketId, `%${search}%`)
       )!
     )
   }
