@@ -1,112 +1,102 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 /* ── Types ── */
 interface InvoiceData {
-  ticketId: string
-  customerName: string
-  phone: string
-  receivedDate: string
-  deviceType: string
-  deviceModel: string
-  accessories: string
-  conditionBefore: string
-  conditionAfter: string
-  repairCost: string
-  receivedBy: string
-  repairedBy: string
-  status: string
-  returnedDate: string
-  printedAt: string
-  notes: string
+  ticketId: string; customerName: string; phone: string; receivedDate: string
+  deviceType: string; deviceModel: string; accessories: string
+  conditionBefore: string; conditionAfter: string; repairCost: string
+  receivedBy: string; repairedBy: string; status: string
+  returnedDate: string; printedAt: string; notes: string
 }
 
 type PaperKey = 'A4' | 'A5' | 'A6' | 'A7'
 
+type FieldKey =
+  | 'ticketId' | 'receivedDate' | 'customerName' | 'phone'
+  | 'deviceType' | 'deviceModel' | 'accessories'
+  | 'conditionBefore' | 'conditionAfter' | 'repairCost'
+  | 'receivedBy' | 'repairedBy' | 'status'
+  | 'returnedDate' | 'printedAt' | 'notes'
+  | 'signature' | 'shopInfo'
+
+const FIELD_LABELS: Record<FieldKey, string> = {
+  ticketId: 'Mã phiếu', receivedDate: 'Ngày nhận', customerName: 'Khách hàng', phone: 'SĐT',
+  deviceType: 'Hiệu máy', deviceModel: 'Model', accessories: 'Phụ kiện',
+  conditionBefore: 'Trước sửa', conditionAfter: 'Sau sửa', repairCost: 'Giá sửa',
+  receivedBy: 'Người nhận', repairedBy: 'Người sửa', status: 'Trạng thái',
+  returnedDate: 'Ngày trả', printedAt: 'Ngày in', notes: 'Ghi chú',
+  signature: 'Chữ ký', shopInfo: 'Thông tin cửa hàng',
+}
+
+const DEFAULT_FIELDS: Record<FieldKey, boolean> = {
+  ticketId: true, receivedDate: true, customerName: true, phone: true,
+  deviceType: true, deviceModel: true, accessories: true,
+  conditionBefore: true, conditionAfter: true, repairCost: true,
+  receivedBy: true, repairedBy: true, status: true,
+  returnedDate: true, printedAt: true, notes: true,
+  signature: true, shopInfo: true,
+}
+
+interface ShopInfo { name: string; address: string; phone: string }
+
+const DEFAULT_SHOP: ShopInfo = {
+  name: 'CỬA HÀNG SỬA CHỮA ĐIỆN TỬ ABC',
+  address: '123 Đường ABC, Quận 1, TP.HCM',
+  phone: '0901 234 567',
+}
+
 interface PaperTheme {
-  label: string
-  size: string
-  maxWidth: string
-  padding: string
-  margin: string
-  /* typography (px strings) */
-  title: string
-  subtitle: string
-  section: string
-  cell: string
-  nameHighlight: string
-  footer: string
-  /* spacing */
-  cellPad: string
-  sectionGap: number
-  signatureHeight: number
-  /* layout */
-  columns: 1 | 2
-  showShopName: boolean
-  showSubtitle: boolean
-  showNotes: boolean
-  showConditionAfter: boolean
-  showPrintDate: boolean
-  labelW: string
+  label: string; size: string; maxWidth: string; padding: string; margin: string
+  title: string; subtitle: string; section: string; cell: string; nameHighlight: string; footer: string
+  cellPad: string; sectionGap: number; signatureHeight: number; labelW: string
 }
 
 const THEMES: Record<PaperKey, PaperTheme> = {
   A4: {
     label: 'A4', size: 'A4', maxWidth: '210mm', padding: '12mm 14mm', margin: '10mm',
     title: '22px', subtitle: '13px', section: '14px', cell: '13px', nameHighlight: '20px', footer: '10px',
-    cellPad: '7px 10px', sectionGap: 12, signatureHeight: 56,
-    columns: 2, showShopName: true, showSubtitle: true, showNotes: true, showConditionAfter: true, showPrintDate: true,
-    labelW: '28%',
+    cellPad: '7px 10px', sectionGap: 12, signatureHeight: 56, labelW: '28%',
   },
   A5: {
     label: 'A5', size: 'A5', maxWidth: '148mm', padding: '8mm 10mm', margin: '7mm',
     title: '15px', subtitle: '9px', section: '10px', cell: '9px', nameHighlight: '14px', footer: '7px',
-    cellPad: '5px 7px', sectionGap: 8, signatureHeight: 39,
-    columns: 2, showShopName: true, showSubtitle: true, showNotes: true, showConditionAfter: true, showPrintDate: true,
-    labelW: '29%',
+    cellPad: '5px 7px', sectionGap: 8, signatureHeight: 39, labelW: '29%',
   },
   A6: {
     label: 'A6', size: 'A6', maxWidth: '105mm', padding: '6mm 7mm', margin: '5mm',
     title: '11px', subtitle: '7px', section: '7px', cell: '7px', nameHighlight: '10px', footer: '5px',
-    cellPad: '3px 5px', sectionGap: 6, signatureHeight: 28,
-    columns: 2, showShopName: true, showSubtitle: false, showNotes: true, showConditionAfter: false, showPrintDate: true,
-    labelW: '31%',
+    cellPad: '3px 5px', sectionGap: 6, signatureHeight: 28, labelW: '31%',
   },
   A7: {
     label: 'A7', size: 'A7', maxWidth: '74mm', padding: '4mm 5mm', margin: '4mm',
     title: '8px', subtitle: '5px', section: '5px', cell: '5px', nameHighlight: '8px', footer: '4px',
-    cellPad: '2px 3px', sectionGap: 4, signatureHeight: 20,
-    columns: 1, showShopName: false, showSubtitle: false, showNotes: false, showConditionAfter: false, showPrintDate: false,
-    labelW: '33%',
+    cellPad: '2px 3px', sectionGap: 4, signatureHeight: 20, labelW: '33%',
   },
 }
 
-/* ── Reusable sub-components ── */
+/* ── localStorage ── */
+const STORAGE_KEY = 'print-settings'
+interface PrintSettings { paper: PaperKey; fields: Record<FieldKey, boolean>; shop: ShopInfo }
+function loadSettings(): PrintSettings | null {
+  if (typeof window === 'undefined') return null
+  try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null } catch { return null }
+}
+function saveSettings(s: PrintSettings) {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)) } catch {}
+}
 
-function Row({ cfg, label, children, wide, highlight }: {
-  cfg: PaperTheme; label: string; children: React.ReactNode; wide?: boolean; highlight?: boolean
+/* ── Sub-components ── */
+function Row({ cfg, label, children, highlight }: {
+  cfg: PaperTheme; label: string; children: React.ReactNode; highlight?: boolean
 }) {
-  const s = {
-    border: '1px solid #111827',
-    padding: cfg.cellPad,
-    lineHeight: 1.35,
-    wordBreak: 'break-word' as const,
-    verticalAlign: 'top' as const,
-  }
+  const s = { border: '1px solid #111827', padding: cfg.cellPad, lineHeight: 1.35, wordBreak: 'break-word' as const, verticalAlign: 'top' as const }
   return (
     <tr>
-      <td style={{
-        ...s,
-        fontWeight: 700,
-        width: wide ? '22%' : cfg.labelW,
-        whiteSpace: 'nowrap' as const,
-      }}>{label}</td>
-      <td className={highlight ? 'print-name' : undefined} style={{
-        ...s,
-        fontWeight: highlight ? 700 : 400,
-        letterSpacing: highlight ? '0.01em' : undefined,
-      }}>{children}</td>
+      <td style={{ ...s, fontWeight: 700, width: cfg.labelW, whiteSpace: 'nowrap' as const }}>{label}</td>
+      <td className={highlight ? 'print-name' : undefined} style={{ ...s, fontWeight: highlight ? 700 : 400, letterSpacing: highlight ? '0.01em' : undefined }}>{children}</td>
     </tr>
   )
 }
@@ -120,40 +110,99 @@ function Section({ cfg, title, children }: { cfg: PaperTheme; title: string; chi
   )
 }
 
-function Table({ children }: { children: React.ReactNode }) {
+function Tbl({ children }: { children: React.ReactNode }) {
   return <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>{children}</table>
 }
 
-/* ── Main ── */
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', padding: '4px 0', userSelect: 'none' }}>
+      <span onClick={() => onChange(!checked)} style={{
+        width: '34px', height: '18px', borderRadius: '9px', position: 'relative', transition: 'background 0.2s',
+        backgroundColor: checked ? '#2563eb' : '#d1d5db', flexShrink: 0, cursor: 'pointer',
+      }}>
+        <span style={{
+          position: 'absolute', top: '2px', left: checked ? '16px' : '2px',
+          width: '14px', height: '14px', borderRadius: '50%', backgroundColor: '#fff',
+          transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+        }} />
+      </span>
+      <span style={{ color: checked ? '#111827' : '#9ca3af' }}>{label}</span>
+    </label>
+  )
+}
 
+/* ── Sidebar section ── */
+function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: '20px' }}>
+      <h3 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', margin: '0 0 10px 0' }}>{title}</h3>
+      {children}
+    </div>
+  )
+}
+
+/* ── Main ── */
 export default function PrintClient({ data }: { data: InvoiceData }) {
   const [paper, setPaper] = useState<PaperKey>('A5')
+  const [fields, setFields] = useState<Record<FieldKey, boolean>>(DEFAULT_FIELDS)
+  const [shop, setShop] = useState<ShopInfo>(DEFAULT_SHOP)
+  const [loaded, setLoaded] = useState(false)
+  const [zoom, setZoom] = useState(1)
+  const previewRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const saved = loadSettings()
+    if (saved) {
+      setPaper(saved.paper)
+      setFields({ ...DEFAULT_FIELDS, ...saved.fields })
+      setShop({ ...DEFAULT_SHOP, ...saved.shop })
+    }
+    setLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (!loaded) return
+    saveSettings({ paper, fields, shop })
+  }, [paper, fields, shop, loaded])
+
   const cfg = THEMES[paper]
+  const f = fields
+
+  const toggleField = (key: FieldKey) => setFields(prev => ({ ...prev, [key]: !prev[key] }))
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    setZoom(prev => {
+      const delta = e.deltaY > 0 ? -0.05 : 0.05
+      const next = Math.round((prev + delta) * 100) / 100
+      return Math.min(3, Math.max(0.2, next))
+    })
+  }, [])
+
+  const inputStyle = {
+    width: '100%', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '7px 10px',
+    fontSize: '13px', fontFamily: 'inherit', outline: 'none', transition: 'border 0.15s',
+    boxSizing: 'border-box' as const,
+  }
 
   return (
     <main style={{
-      minHeight: '100vh', backgroundColor: '#f3f4f6', padding: '16px 8px',
+      minHeight: '100vh', backgroundColor: '#f3f4f6',
       boxSizing: 'border-box', fontFamily: '"Times New Roman", Times, serif', color: '#111827',
+      display: 'flex', flexDirection: 'column',
     }}>
       <style key={`print-${paper}`}>{`
         @page { size: ${cfg.size}; margin: ${cfg.margin}; }
-
-        /* Override Tailwind reset for print page */
-        .print-sheet table,
-        .print-sheet td,
-        .print-sheet th,
-        .print-sheet p,
-        .print-sheet div,
-        .print-sheet span {
-          font-size: ${cfg.cell} !important;
-          line-height: 1.35;
+        .print-sheet table, .print-sheet td, .print-sheet th,
+        .print-sheet p, .print-sheet div, .print-sheet span {
+          font-size: ${cfg.cell} !important; line-height: 1.35;
         }
         .print-sheet .print-title { font-size: ${cfg.title} !important; }
         .print-sheet .print-subtitle { font-size: ${cfg.subtitle} !important; }
         .print-sheet .print-section { font-size: ${cfg.section} !important; }
         .print-sheet .print-name { font-size: ${cfg.nameHighlight} !important; }
         .print-sheet .print-footer { font-size: ${cfg.footer} !important; }
-
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           main { background: #fff !important; padding: 0 !important; }
@@ -164,271 +213,298 @@ export default function PrintClient({ data }: { data: InvoiceData }) {
         }
       `}</style>
 
-      {/* ── Controls ── */}
+      {/* ═══ TOP BAR ═══ */}
       <div className="no-print" style={{
-        display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', marginBottom: '12px',
+        backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb', padding: '10px 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
       }}>
-        {(['A4', 'A5', 'A6', 'A7'] as PaperKey[]).map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setPaper(k)}
-            style={{
-              appearance: 'none',
-              border: `1px solid ${paper === k ? '#111827' : '#d1d5db'}`,
-              backgroundColor: paper === k ? '#111827' : '#fff',
-              color: paper === k ? '#fff' : '#374151',
-              padding: '6px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
-            }}
-          >
-            {k}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => window.print()}
-          style={{
-            appearance: 'none', border: '1px solid #1d4ed8', backgroundColor: '#1d4ed8',
-            color: '#fff', padding: '6px 16px', borderRadius: '6px', fontFamily: 'inherit',
-            fontSize: '13px', fontWeight: 700, cursor: 'pointer', marginLeft: '4px',
-          }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 700 }}>In phiếu sửa chữa</span>
+          <span style={{ fontSize: '12px', color: '#9ca3af' }}>|</span>
+          <span style={{ fontSize: '13px', color: '#6b7280' }}>{data.ticketId} — {data.customerName}</span>
+        </div>
+        <button type="button" onClick={() => window.print()} style={{
+          appearance: 'none', border: 'none', backgroundColor: '#2563eb',
+          color: '#fff', padding: '8px 24px', borderRadius: '8px', fontSize: '14px',
+          fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+          display: 'flex', alignItems: 'center', gap: '6px',
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           In phiếu
         </button>
       </div>
 
-      {/* ── Sheet ── */}
-      <div className="print-shell">
-        <div key={`sheet-${paper}`} className="print-sheet" style={{
-          width: '100%', maxWidth: cfg.maxWidth, margin: '0 auto',
-          backgroundColor: '#ffffff', border: '1px solid #111827',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.06)', padding: cfg.padding,
-          boxSizing: 'border-box',
+      {/* ═══ BODY: LEFT + RIGHT ═══ */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* ── LEFT: Settings panel ── */}
+        <div className="no-print" style={{
+          width: '320px', minWidth: '320px', backgroundColor: '#fff',
+          borderRight: '1px solid #e5e7eb', overflowY: 'auto', padding: '20px',
         }}>
 
-          {/* ═══ HEADER ═══ */}
-          <div style={{ textAlign: 'center', marginBottom: cfg.sectionGap }}>
-            {cfg.showShopName && (
-              <p className="print-subtitle" style={{ fontWeight: 700, margin: '0 0 2px 0' }}>
-                CỬA HÀNG SỬA CHỮA ĐIỆN TỬ ABC
-              </p>
+          {/* Paper size */}
+          <SidebarSection title="Khổ giấy">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px' }}>
+              {(['A4', 'A5', 'A6', 'A7'] as PaperKey[]).map(k => (
+                <button key={k} type="button" onClick={() => setPaper(k)} style={{
+                  appearance: 'none', border: `2px solid ${paper === k ? '#2563eb' : '#e5e7eb'}`,
+                  backgroundColor: paper === k ? '#eff6ff' : '#fff',
+                  color: paper === k ? '#2563eb' : '#374151',
+                  padding: '8px 0', borderRadius: '8px', fontSize: '14px', fontWeight: 700,
+                  cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
+                }}>{k}</button>
+              ))}
+            </div>
+          </SidebarSection>
+
+          {/* Shop info */}
+          <SidebarSection title="Thông tin cửa hàng">
+            <Toggle label="Hiện thông tin cửa hàng" checked={f.shopInfo} onChange={() => toggleField('shopInfo')} />
+            {f.shopInfo && (
+              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <input value={shop.name} onChange={e => setShop(s => ({ ...s, name: e.target.value }))} placeholder="Tên cửa hàng" style={inputStyle} />
+                <input value={shop.address} onChange={e => setShop(s => ({ ...s, address: e.target.value }))} placeholder="Địa chỉ" style={inputStyle} />
+                <input value={shop.phone} onChange={e => setShop(s => ({ ...s, phone: e.target.value }))} placeholder="SĐT cửa hàng" style={inputStyle} />
+              </div>
             )}
-            <div className="print-title" style={{
-              fontWeight: 700, margin: 0,
-              letterSpacing: '0.03em', textTransform: 'uppercase',
-            }}>
-              PHIẾU SỬA CHỮA
+          </SidebarSection>
+
+          {/* Field toggles */}
+          <SidebarSection title="Hiển thị trường">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+              {(Object.keys(FIELD_LABELS) as FieldKey[]).filter(k => k !== 'shopInfo').map(key => (
+                <Toggle key={key} label={FIELD_LABELS[key]} checked={f[key]} onChange={() => toggleField(key)} />
+              ))}
             </div>
-            {cfg.showSubtitle && (
-              <p className="print-subtitle" style={{ margin: '2px 0 0 0', color: '#555' }}>
-                Tiếp nhận – Sửa chữa – Bàn giao
-              </p>
-            )}
-          </div>
+          </SidebarSection>
+        </div>
 
-          {/* ═══ A4 / A5: Full 2-column layout ═══ */}
-          {(paper === 'A4' || paper === 'A5') && (
-            <>
-              {/* Mã phiếu + Ngày nhận */}
-              <Table><tbody>
-                <tr>
-                  <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>Mã phiếu</td>
-                  <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.ticketId}</td>
-                  <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>Ngày nhận</td>
-                  <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.receivedDate}</td>
-                </tr>
-              </tbody></Table>
+        {/* ── RIGHT: Preview ── */}
+        <div ref={previewRef} onWheel={handleWheel} style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: '24px', backgroundColor: '#f3f4f6', position: 'relative' }}>
 
-              {/* Khách hàng nổi bật */}
-              <Table><tbody>
-                <tr>
-                  <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>Khách hàng</td>
-                  <td className="print-name" style={{
-                    border: '1px solid #111827', padding: cfg.cellPad,
-                    fontWeight: 700, letterSpacing: '0.01em',
-                  }}>{data.customerName}</td>
-                  <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>SĐT</td>
-                  <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.phone}</td>
-                </tr>
-              </tbody></Table>
-
-              {/* Thiết bị + Sửa chữa */}
-              <div style={{ display: 'flex', gap: cfg.sectionGap, marginTop: cfg.sectionGap }} className="avoid-break">
-                <div style={{ flex: 1 }}>
-                  <Section cfg={cfg} title="Thiết bị">
-                    <Table><tbody>
-                      <Row cfg={cfg} label="Hiệu máy">{data.deviceType}</Row>
-                      <Row cfg={cfg} label="Model">{data.deviceModel}</Row>
-                      <Row cfg={cfg} label="Phụ kiện">{data.accessories}</Row>
-                    </tbody></Table>
-                  </Section>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <Section cfg={cfg} title="Sửa chữa">
-                    <Table><tbody>
-                      <Row cfg={cfg} label="Trước sửa">{data.conditionBefore}</Row>
-                      {cfg.showConditionAfter && <Row cfg={cfg} label="Sau sửa">{data.conditionAfter}</Row>}
-                      <tr>
-                        <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: cfg.labelW, whiteSpace: 'nowrap' }}>Giá sửa</td>
-                        <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>{data.repairCost}</td>
-                      </tr>
-                    </tbody></Table>
-                  </Section>
-                </div>
-              </div>
-
-              {/* Nhân sự + Bàn giao */}
-              <div style={{ display: 'flex', gap: cfg.sectionGap, marginTop: cfg.sectionGap }} className="avoid-break">
-                <div style={{ flex: 1 }}>
-                  <Section cfg={cfg} title="Nhân sự">
-                    <Table><tbody>
-                      <Row cfg={cfg} label="Người nhận">{data.receivedBy}</Row>
-                      <Row cfg={cfg} label="Người sửa">{data.repairedBy}</Row>
-                      <Row cfg={cfg} label="Trạng thái">{data.status}</Row>
-                    </tbody></Table>
-                  </Section>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <Section cfg={cfg} title="Bàn giao">
-                    <Table><tbody>
-                      <Row cfg={cfg} label="Ngày trả">{data.returnedDate}</Row>
-                      {cfg.showPrintDate && <Row cfg={cfg} label="Ngày in">{data.printedAt}</Row>}
-                    </tbody></Table>
-                  </Section>
-                </div>
-              </div>
-
-              {/* Ghi chú */}
-              {cfg.showNotes && (
-                <Section cfg={cfg} title="Ghi chú">
-                  <Table><tbody>
-                    <tr>
-                      <td style={{
-                        border: '1px solid #111827', padding: cfg.cellPad,
-                        minHeight: '30px', whiteSpace: 'pre-wrap', lineHeight: 1.35,
-                      }}>
-                        {data.notes || '..........................................................................'}
-                      </td>
-                    </tr>
-                  </tbody></Table>
-                </Section>
-              )}
-            </>
-          )}
-
-          {/* ═══ A6: Compact single table ═══ */}
-          {paper === 'A6' && (
-            <Table><tbody>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%' }}>Mã phiếu</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.ticketId}</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%' }}>Ngày nhận</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.receivedDate}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Khách hàng</td>
-                <td className="print-name" style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.customerName}</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>SĐT</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.phone}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Hiệu máy</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceType}</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Model</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceModel}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trước sửa</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.conditionBefore}</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>Giá sửa</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>{data.repairCost}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trạng thái</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.status}</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Ngày trả</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.returnedDate}</td>
-              </tr>
-            </tbody></Table>
-          )}
-
-          {/* ═══ A7: Ultra-compact single column ═══ */}
-          {paper === 'A7' && (
-            <Table><tbody>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: cfg.labelW, whiteSpace: 'nowrap' }}>Mã</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.ticketId}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Khách</td>
-                <td className="print-name" style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.customerName}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>SĐT</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.phone}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Hiệu</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceType}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Model</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceModel}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Phụ kiện</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.accessories}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trước sửa</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.conditionBefore}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>Giá sửa</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>{data.repairCost}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trạng thái</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.status}</td>
-              </tr>
-              <tr>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Ngày trả</td>
-                <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.returnedDate}</td>
-              </tr>
-            </tbody></Table>
-          )}
-
-          {/* ═══ CHỮ KÝ ═══ */}
-          <div style={{
-            display: 'flex', justifyContent: 'space-between',
-            marginTop: cfg.sectionGap, gap: cfg.sectionGap,
-          }} className="avoid-break">
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{
-                marginTop: cfg.signatureHeight, borderTop: '1px solid #111827',
-                paddingTop: '2px', fontWeight: 700,
-              }}>
-                Người nhận
-              </div>
-            </div>
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{
-                marginTop: cfg.signatureHeight, borderTop: '1px solid #111827',
-                paddingTop: '2px', fontWeight: 700,
-              }}>
-                Người giao
-              </div>
-            </div>
-          </div>
-
-          {/* ═══ FOOTER ═══ */}
-          <div className="print-footer" style={{
-            marginTop: cfg.sectionGap, display: 'flex', justifyContent: 'space-between',
-            fontStyle: 'italic', color: '#999',
+          {/* Zoom controls */}
+          <div className="no-print" style={{
+            position: 'sticky', top: 0, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: '8px', padding: '8px 0', marginBottom: '8px',
           }}>
-            <span>In lúc: {data.printedAt}</span>
-            <span>Phiếu sửa chữa</span>
+            <button type="button" onClick={() => setZoom(z => Math.max(0.3, Math.round((z - 0.1) * 10) / 10))} style={{
+              appearance: 'none', border: '1px solid #d1d5db', backgroundColor: '#fff',
+              color: '#374151', width: '32px', height: '32px', borderRadius: '6px', fontSize: '18px',
+              fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+            }}>−</button>
+            <span style={{
+              fontSize: '13px', fontWeight: 600, color: '#374151', minWidth: '48px', textAlign: 'center',
+              backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '4px 8px',
+            }}>{Math.round(zoom * 100)}%</span>
+            <button type="button" onClick={() => setZoom(z => Math.min(3, Math.round((z + 0.1) * 10) / 10))} style={{
+              appearance: 'none', border: '1px solid #d1d5db', backgroundColor: '#fff',
+              color: '#374151', width: '32px', height: '32px', borderRadius: '6px', fontSize: '18px',
+              fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+            }}>+</button>
+            <button type="button" onClick={() => setZoom(1)} style={{
+              appearance: 'none', border: '1px solid #d1d5db', backgroundColor: '#fff',
+              color: '#374151', height: '32px', borderRadius: '6px', fontSize: '12px',
+              fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: '0 10px',
+            }}>Vừa</button>
+          </div>
+
+          <div className="print-shell" style={{ display: 'flex', justifyContent: 'center', transformOrigin: 'top center', transform: `scale(${zoom})` }}>
+            <div key={`sheet-${paper}`} className="print-sheet" style={{
+              width: '100%', maxWidth: cfg.maxWidth,
+              backgroundColor: '#ffffff', border: '1px solid #111827',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: cfg.padding,
+              boxSizing: 'border-box',
+            }}>
+
+              {/* HEADER */}
+              <div style={{ textAlign: 'center', marginBottom: cfg.sectionGap }}>
+                {f.shopInfo && (
+                  <div style={{ marginBottom: '4px' }}>
+                    <p className="print-subtitle" style={{ fontWeight: 700, margin: '0 0 1px 0' }}>{shop.name}</p>
+                    <p style={{ margin: '0 0 1px 0', color: '#555' }}>{shop.address}</p>
+                    <p style={{ margin: 0, color: '#555' }}>ĐT: {shop.phone}</p>
+                  </div>
+                )}
+                <div className="print-title" style={{ fontWeight: 700, margin: 0, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  PHIẾU SỬA CHỮA
+                </div>
+              </div>
+
+              {/* A4/A5 */}
+              {(paper === 'A4' || paper === 'A5') && (
+                <>
+                  <Tbl><tbody>
+                    <tr>
+                      {f.ticketId && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>Mã phiếu</td>
+                      <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.ticketId}</td></>}
+                      {f.receivedDate && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>Ngày nhận</td>
+                      <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.receivedDate}</td></>}
+                    </tr>
+                    {f.customerName && <tr>
+                      <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>Khách hàng</td>
+                      <td className="print-name" style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, letterSpacing: '0.01em' }}>{data.customerName}</td>
+                      {f.phone && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>SĐT</td>
+                      <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.phone}</td></>}
+                    </tr>}
+                  </tbody></Tbl>
+
+                  <div style={{ display: 'flex', gap: cfg.sectionGap, marginTop: cfg.sectionGap }} className="avoid-break">
+                    <div style={{ flex: 1 }}>
+                      <Section cfg={cfg} title="Thiết bị">
+                        <Tbl><tbody>
+                          {f.deviceType && <Row cfg={cfg} label="Hiệu máy">{data.deviceType}</Row>}
+                          {f.deviceModel && <Row cfg={cfg} label="Model">{data.deviceModel}</Row>}
+                          {f.accessories && <Row cfg={cfg} label="Phụ kiện">{data.accessories}</Row>}
+                        </tbody></Tbl>
+                      </Section>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Section cfg={cfg} title="Sửa chữa">
+                        <Tbl><tbody>
+                          {f.conditionBefore && <Row cfg={cfg} label="Trước sửa">{data.conditionBefore}</Row>}
+                          {f.conditionAfter && <Row cfg={cfg} label="Sau sửa">{data.conditionAfter}</Row>}
+                          {f.repairCost && <tr>
+                            <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: cfg.labelW, whiteSpace: 'nowrap' }}>Giá sửa</td>
+                            <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>{data.repairCost}</td>
+                          </tr>}
+                        </tbody></Tbl>
+                      </Section>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: cfg.sectionGap, marginTop: cfg.sectionGap }} className="avoid-break">
+                    <div style={{ flex: 1 }}>
+                      <Section cfg={cfg} title="Nhân sự">
+                        <Tbl><tbody>
+                          {f.receivedBy && <Row cfg={cfg} label="Người nhận">{data.receivedBy}</Row>}
+                          {f.repairedBy && <Row cfg={cfg} label="Người sửa">{data.repairedBy}</Row>}
+                          {f.status && <Row cfg={cfg} label="Trạng thái">{data.status}</Row>}
+                        </tbody></Tbl>
+                      </Section>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Section cfg={cfg} title="Bàn giao">
+                        <Tbl><tbody>
+                          {f.returnedDate && <Row cfg={cfg} label="Ngày trả">{data.returnedDate}</Row>}
+                          {f.printedAt && <Row cfg={cfg} label="Ngày in">{data.printedAt}</Row>}
+                        </tbody></Tbl>
+                      </Section>
+                    </div>
+                  </div>
+
+                  {f.notes && (
+                    <Section cfg={cfg} title="Ghi chú">
+                      <Tbl><tbody>
+                        <tr>
+                          <td style={{ border: '1px solid #111827', padding: cfg.cellPad, minHeight: '30px', whiteSpace: 'pre-wrap', lineHeight: 1.35 }}>
+                            {data.notes || '..........................................................................'}
+                          </td>
+                        </tr>
+                      </tbody></Tbl>
+                    </Section>
+                  )}
+                </>
+              )}
+
+              {/* A6 */}
+              {paper === 'A6' && (
+                <Tbl><tbody>
+                  {f.ticketId && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%' }}>Mã phiếu</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.ticketId}</td>
+                    {f.receivedDate && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%' }}>Ngày nhận</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.receivedDate}</td></>}
+                  </tr>}
+                  {f.customerName && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Khách hàng</td>
+                    <td className="print-name" style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.customerName}</td>
+                    {f.phone && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>SĐT</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.phone}</td></>}
+                  </tr>}
+                  {f.deviceType && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Hiệu máy</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceType}</td>
+                    {f.deviceModel && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Model</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceModel}</td></>}
+                  </tr>}
+                  {f.conditionBefore && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trước sửa</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.conditionBefore}</td>
+                    {f.repairCost && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>Giá sửa</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>{data.repairCost}</td></>}
+                  </tr>}
+                  {f.status && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trạng thái</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.status}</td>
+                    {f.returnedDate && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Ngày trả</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.returnedDate}</td></>}
+                  </tr>}
+                </tbody></Tbl>
+              )}
+
+              {/* A7 */}
+              {paper === 'A7' && (
+                <Tbl><tbody>
+                  {f.ticketId && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: cfg.labelW, whiteSpace: 'nowrap' }}>Mã</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.ticketId}</td>
+                  </tr>}
+                  {f.customerName && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Khách</td>
+                    <td className="print-name" style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.customerName}</td>
+                  </tr>}
+                  {f.phone && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>SĐT</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.phone}</td>
+                  </tr>}
+                  {f.deviceType && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Hiệu</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceType}</td>
+                  </tr>}
+                  {f.deviceModel && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Model</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceModel}</td>
+                  </tr>}
+                  {f.conditionBefore && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trước sửa</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.conditionBefore}</td>
+                  </tr>}
+                  {f.repairCost && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>Giá sửa</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>{data.repairCost}</td>
+                  </tr>}
+                  {f.status && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trạng thái</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.status}</td>
+                  </tr>}
+                  {f.returnedDate && <tr>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Ngày trả</td>
+                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.returnedDate}</td>
+                  </tr>}
+                </tbody></Tbl>
+              )}
+
+              {/* CHỮ KÝ */}
+              {f.signature && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: cfg.sectionGap, gap: cfg.sectionGap }} className="avoid-break">
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ marginTop: cfg.signatureHeight, borderTop: '1px solid #111827', paddingTop: '2px', fontWeight: 700 }}>Người nhận</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ marginTop: cfg.signatureHeight, borderTop: '1px solid #111827', paddingTop: '2px', fontWeight: 700 }}>Người giao</div>
+                  </div>
+                </div>
+              )}
+
+              {/* FOOTER */}
+              <div className="print-footer" style={{ marginTop: cfg.sectionGap, display: 'flex', justifyContent: 'space-between', fontStyle: 'italic', color: '#999' }}>
+                <span>In lúc: {data.printedAt}</span>
+                <span>Phiếu sửa chữa</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

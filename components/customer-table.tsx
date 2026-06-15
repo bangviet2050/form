@@ -34,6 +34,8 @@ interface CustomerTableProps {
   page: number
   totalPages: number
   onPageChange: (page: number) => void
+  selectedIds: Set<number>
+  onSelect: (ids: Set<number>) => void
 }
 
 type SortField =
@@ -58,13 +60,17 @@ export function CustomerTable({
   page,
   totalPages,
   onPageChange,
+  selectedIds: selectedIdsProp,
+  onSelect: onSelectProp,
 }: CustomerTableProps) {
   const [deleting, setDeleting] = useState<number | null>(null)
   const [editingCell, setEditingCell] = useState<{ id: number; field: string } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [sortField, setSortField] = useState<SortField | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [localSelectedIds, setLocalSelectedIds] = useState<Set<number>>(new Set())
+  const selectedIds = onSelectProp !== undefined ? selectedIdsProp : localSelectedIds
+  const setSelectedIds = onSelectProp !== undefined ? onSelectProp : setLocalSelectedIds
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
   const [pageInput, setPageInput] = useState('')
   const [historyCustomer, setHistoryCustomer] = useState<{ name: string; phone: string } | null>(null)
@@ -248,24 +254,20 @@ export function CustomerTable({
   }
 
   const toggleRowSelection = (id: number) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    const next = new Set(selectedIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedIds(next)
   }
 
   const toggleSelectAll = () => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (allVisibleSelected) {
-        customers.forEach((customer) => next.delete(customer.id))
-        return next
-      }
+    const next = new Set(selectedIds)
+    if (allVisibleSelected) {
+      customers.forEach((customer) => next.delete(customer.id))
+    } else {
       customers.forEach((customer) => next.add(customer.id))
-      return next
-    })
+    }
+    setSelectedIds(next)
   }
 
   const startEdit = (id: number, field: string, value: string) => {
@@ -358,12 +360,11 @@ export function CustomerTable({
     const oldSelectedIds = new Set(selectedIds)
 
     onCustomersUpdate(customers.filter((c) => c.id !== id))
-    setSelectedIds((prev) => {
-      if (!prev.has(id)) return prev
-      const next = new Set(prev)
+    if (selectedIds.has(id)) {
+      const next = new Set(selectedIds)
       next.delete(id)
-      return next
-    })
+      setSelectedIds(next)
+    }
 
     try {
       await deleteCustomer(id)

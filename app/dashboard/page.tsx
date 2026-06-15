@@ -24,6 +24,7 @@ import {
   DollarSign,
   Eye,
   EyeOff,
+  Printer,
 } from 'lucide-react'
 
 type StatusHistoryEntry = {
@@ -89,6 +90,7 @@ export default function DashboardPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [printingCustomer, setPrintingCustomer] = useState<Customer | null>(null)
   const [printOpen, setPrintOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [statusHistoryCustomer, setStatusHistoryCustomer] = useState<Customer | null>(null)
   const [user, setUser] = useState<{ name: string; email: string; role: string; status: string; avatar?: string | null; canAddOptions?: boolean; permissions?: string | null } | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -626,6 +628,15 @@ export default function DashboardPage() {
               <Plus className="h-4 w-4" />
               Thêm khách hàng
             </Button>
+            {selectedIds.size > 0 && (
+              <Button
+                onClick={() => window.open(`/print/bulk?ids=${Array.from(selectedIds).join(',')}`, '_blank', 'noopener,noreferrer')}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2 h-9 px-4 rounded-lg shadow-sm shrink-0"
+              >
+                <Printer className="h-4 w-4" />
+                In ({selectedIds.size})
+              </Button>
+            )}
           </div>
 
           {/* Table */}
@@ -652,6 +663,8 @@ export default function DashboardPage() {
                 page={currentPage}
                 totalPages={totalPages}
                 onPageChange={handlePageChange}
+                selectedIds={selectedIds}
+                onSelect={setSelectedIds}
               />
             )}
           </div>
