@@ -38,7 +38,14 @@ function getStatusLabel(status: string) {
 }
 
 export default async function BulkPrintPage({ searchParams: sp }: BulkPrintPageProps) {
-  const session = await getSession()
+  let session
+  try {
+    session = await getSession()
+  } catch (error) {
+    console.error('[BulkPrintPage] getSession error:', error)
+    redirect('/sign-in')
+  }
+
   if (!session) redirect('/sign-in')
 
   const params = await sp
@@ -48,12 +55,19 @@ export default async function BulkPrintPage({ searchParams: sp }: BulkPrintPageP
   const ids = idsParam.split(',').map(Number).filter(n => !Number.isNaN(n))
   if (ids.length === 0) notFound()
 
-  const whereCondition = session.user.role === 'admin'
-    ? inArray(customers.id, ids)
-    : and(inArray(customers.id, ids), eq(customers.userId, session.user.id))
+  let results
+  try {
+    const whereCondition = session.user.role === 'admin'
+      ? inArray(customers.id, ids)
+      : and(inArray(customers.id, ids), eq(customers.userId, session.user.id))
 
-  const results = await db.select().from(customers).where(whereCondition)
-  if (results.length === 0) notFound()
+    results = await db.select().from(customers).where(whereCondition)
+  } catch (error) {
+    console.error('[BulkPrintPage] Database query error:', error)
+    throw new Error('Không thể tải dữ liệu phiếu. Vui lòng thử lại sau.')
+  }
+
+  if (!results || results.length === 0) notFound()
 
   const printedAt = formatVietnamDateTime(new Date())
 

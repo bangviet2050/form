@@ -88,6 +88,7 @@ export function CustomerForm({
   useEffect(() => {
     if (open) {
       getOptions().then((data) => {
+        if (!Array.isArray(data)) return
         const grouped: Record<PredefinedCategory, string[]> = { deviceType: [], deviceModel: [], accessories: [], conditionBefore: [], conditionAfter: [], receivedBy: [], repairedBy: [] }
         const models: { value: string; parentValue: string | null }[] = []
         for (const item of data as { category: string; value: string; parentValue: string | null }[]) {
@@ -101,8 +102,8 @@ export function CustomerForm({
         }
         setSuggestions(grouped)
         setModelOptions(models)
-      })
-      getExistingCustomers().then(setExistingCustomers)
+      }).catch(() => {})
+      getExistingCustomers().then(setExistingCustomers).catch(() => {})
     }
   }, [open])
 

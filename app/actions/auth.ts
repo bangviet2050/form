@@ -110,6 +110,11 @@ export async function signOut() {
 }
 
 export async function getCurrentUser() {
-  const result = await getSession()
-  return result?.user || null
+  try {
+    const result = await getSession()
+    return result?.user || null
+  } catch (error) {
+    console.error('getCurrentUser error:', error)
+    return null
+  }
 }

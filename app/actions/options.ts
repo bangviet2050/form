@@ -18,21 +18,26 @@ async function requireAuth() {
 export type PredefinedCategory = 'deviceType' | 'deviceModel' | 'accessories' | 'conditionBefore' | 'conditionAfter' | 'receivedBy' | 'repairedBy'
 
 export async function getOptions(category?: PredefinedCategory) {
-  await requireAuth()
+  try {
+    await requireAuth()
 
-  // Options are shared — no userId filter
-  if (category) {
+    // Options are shared — no userId filter
+    if (category) {
+      return db
+        .select()
+        .from(predefinedOptions)
+        .where(eq(predefinedOptions.category, category))
+        .orderBy(predefinedOptions.value)
+    }
+
     return db
       .select()
       .from(predefinedOptions)
-      .where(eq(predefinedOptions.category, category))
-      .orderBy(predefinedOptions.value)
+      .orderBy(predefinedOptions.category, predefinedOptions.value)
+  } catch (error) {
+    console.error('getOptions error:', error)
+    return []
   }
-
-  return db
-    .select()
-    .from(predefinedOptions)
-    .orderBy(predefinedOptions.category, predefinedOptions.value)
 }
 
 export async function addOption(

@@ -47,47 +47,34 @@ function getStatusLabel(status: string) {
   return map[status] || status
 }
 
-/* ── Paper size configs ── */
-const PAPER_CONFIGS: Record<string, {
-  label: string; size: string; maxWidth: string; padding: string; margin: string;
-  titleSize: string; sectionSize: string; cellSize: string; nameSize: string; cellPad: string; labelWidth: string;
-}> = {
-  A4: {
-    label: 'A4', size: 'A4', maxWidth: '210mm', padding: '10mm 12mm', margin: '10mm',
-    titleSize: '18px', sectionSize: '12px', cellSize: '12px', nameSize: '16px',
-    cellPad: '6px 8px', labelWidth: '32%',
-  },
-  A5: {
-    label: 'A5', size: 'A5', maxWidth: '148mm', padding: '6mm 7mm', margin: '5mm',
-    titleSize: '14px', sectionSize: '10px', cellSize: '10px', nameSize: '14px',
-    cellPad: '3px 5px', labelWidth: '35%',
-  },
-  A6: {
-    label: 'A6', size: 'A6', maxWidth: '105mm', padding: '4mm 5mm', margin: '4mm',
-    titleSize: '11px', sectionSize: '8px', cellSize: '8px', nameSize: '11px',
-    cellPad: '2px 3px', labelWidth: '36%',
-  },
-  A7: {
-    label: 'A7', size: 'A7', maxWidth: '74mm', padding: '3mm 3mm', margin: '3mm',
-    titleSize: '9px', sectionSize: '7px', cellSize: '7px', nameSize: '9px',
-    cellPad: '1px 2px', labelWidth: '38%',
-  },
-}
-
 export default async function PrintInvoicePage({ params }: PrintInvoicePageProps) {
-  const session = await getSession()
+  let session
+  try {
+    session = await getSession()
+  } catch (error) {
+    console.error('[PrintPage] getSession error:', error)
+    redirect('/sign-in')
+  }
+
   if (!session) redirect('/sign-in')
 
   const { id } = await params
   const customerId = Number.parseInt(id, 10)
   if (Number.isNaN(customerId)) notFound()
 
-  const whereCondition = session.user.role === 'admin'
-    ? eq(customers.id, customerId)
-    : and(eq(customers.id, customerId), eq(customers.userId, session.user.id))
+  let customer
+  try {
+    const whereCondition = session.user.role === 'admin'
+      ? eq(customers.id, customerId)
+      : and(eq(customers.id, customerId), eq(customers.userId, session.user.id))
 
-  const result = await db.select().from(customers).where(whereCondition).limit(1)
-  const customer = result[0]
+    const result = await db.select().from(customers).where(whereCondition).limit(1)
+    customer = result[0]
+  } catch (error) {
+    console.error('[PrintPage] Database query error:', error)
+    throw new Error('Không thể tải dữ liệu phiếu. Vui lòng thử lại sau.')
+  }
+
   if (!customer) notFound()
 
   const printedAt = formatVietnamDateTime(new Date())

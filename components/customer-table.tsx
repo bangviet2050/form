@@ -108,6 +108,7 @@ export function CustomerTable({
 
   useEffect(() => {
     getOptions().then((data) => {
+      if (!Array.isArray(data)) return
       const grouped: Record<PredefinedCategory, string[]> = { deviceType: [], deviceModel: [], accessories: [], conditionBefore: [], conditionAfter: [], receivedBy: [], repairedBy: [] }
       const models: { value: string; parentValue: string | null }[] = []
       for (const item of data as { category: string; value: string; parentValue: string | null }[]) {
@@ -124,7 +125,7 @@ export function CustomerTable({
       }
       setSuggestions(grouped)
       setModelWithParent(models)
-    })
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {

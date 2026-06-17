@@ -41,10 +41,14 @@ export async function createSession(userId: string): Promise<string> {
 }
 
 export async function getSession() {
+  try {
   const cookieStore = await cookies()
   const token = cookieStore.get(SESSION_COOKIE)?.value
 
-  if (!token) return null
+  if (!token) {
+    console.log('[getSession] No session token found in cookies')
+    return null
+  }
 
   const result = await db
     .select({
@@ -56,18 +60,26 @@ export async function getSession() {
     .where(eq(session.token, token))
     .limit(1)
 
-  if (result.length === 0) return null
+  if (result.length === 0) {
+    console.log('[getSession] No session found for token')
+    return null
+  }
 
   const { session: s, user: u } = result[0]
 
   // Check expiration
   if (new Date(s.expiresAt) < new Date()) {
+    console.log('[getSession] Session expired')
     await db.delete(session).where(eq(session.token, token))
     return null
   }
 
   const safeUser = sanitizeUser(u)
   return { session: s, user: safeUser }
+  } catch (error) {
+    console.error('[getSession] Error:', error)
+    return null
+  }
 }
 
 export async function deleteSession() {

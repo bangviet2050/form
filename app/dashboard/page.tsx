@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { CustomerForm } from '@/components/customer-form'
 import { CustomerTable } from '@/components/customer-table'
 import { SearchFilter } from '@/components/search-filter'
-import { PrintInvoice } from '@/components/print-invoice'
 import { Sheet } from '@/components/ui/sheet'
 import { getCustomers, getCustomerStats, getCustomerStaffNames } from '@/app/actions/customers'
 import { getCurrentUser, signOut } from '@/app/actions/auth'
@@ -88,8 +87,6 @@ export default function DashboardPage() {
   })
   const [formOpen, setFormOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
-  const [printingCustomer, setPrintingCustomer] = useState<Customer | null>(null)
-  const [printOpen, setPrintOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [statusHistoryCustomer, setStatusHistoryCustomer] = useState<Customer | null>(null)
   const [user, setUser] = useState<{ name: string; email: string; role: string; status: string; avatar?: string | null; canAddOptions?: boolean; permissions?: string | null } | null>(null)
@@ -441,8 +438,7 @@ export default function DashboardPage() {
   }
 
   const handlePrintInvoice = (customer: Customer) => {
-    setPrintingCustomer(customer)
-    setPrintOpen(true)
+    window.open(`/print/${customer.id}`, '_blank')
   }
 
   const hasActiveFilters = Boolean(searchQuery.trim() || statusFilter || dateFrom || dateTo || staffFilter)
@@ -637,7 +633,7 @@ export default function DashboardPage() {
             </Button>
             {selectedIds.size > 0 && (
               <Button
-                onClick={() => window.open(`/print/bulk?ids=${Array.from(selectedIds).join(',')}`, '_blank', 'noopener,noreferrer')}
+                onClick={() => window.open(`/print/bulk?ids=${Array.from(selectedIds).join(',')}`, '_blank')}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2 h-9 px-4 rounded-lg shadow-sm shrink-0"
               >
                 <Printer className="h-4 w-4" />
@@ -686,14 +682,6 @@ export default function DashboardPage() {
         customer={editingCustomer}
         onSuccess={loadData}
       />
-
-      {printingCustomer && (
-        <PrintInvoice
-          customer={printingCustomer}
-          open={printOpen}
-          onOpenChange={setPrintOpen}
-        />
-      )}
 
       {/* Status history side panel */}
       {statusHistoryCustomer && (

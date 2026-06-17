@@ -147,6 +147,7 @@ export async function getCustomers(
   viewAll?: boolean,
   staffName?: string
 ) {
+  try {
   const { userId, role } = await getUserRole()
 
   // Admin with viewAll sees all orders; otherwise only own orders
@@ -198,7 +199,7 @@ export async function getCustomers(
     }
   }
 
-  const whereClause = and(...conditions)
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
   const orderBy =
     sortBy === 'recent'
@@ -251,9 +252,19 @@ export async function getCustomers(
     page,
     totalCount,
   }
+  } catch (error) {
+    console.error('getCustomers error:', error)
+    return {
+      data: [],
+      totalPages: 1,
+      page: 1,
+      totalCount: 0,
+    }
+  }
 }
 
 export async function getCustomerStaffNames(viewAll?: boolean) {
+  try {
   const { userId, role } = await getUserRole()
   const canViewAll = role === 'admin' && viewAll === true
 
@@ -276,6 +287,10 @@ export async function getCustomerStaffNames(viewAll?: boolean) {
 
   // Return object with role info so UI can group them
   return sorted.map((r) => ({ name: r.name!.trim(), role: r.role }))
+  } catch (error) {
+    console.error('getCustomerStaffNames error:', error)
+    return []
+  }
 }
 
 export async function updateCustomer(
@@ -428,6 +443,7 @@ export async function deleteCustomer(id: number) {
 }
 
 export async function getCustomerStats(viewAll?: boolean, staffName?: string) {
+  try {
   const { userId, role } = await getUserRole()
 
   // Build where clause
@@ -468,9 +484,22 @@ export async function getCustomerStats(viewAll?: boolean, staffName?: string) {
     totalRevenue: Number(r?.totalRevenue || 0),
     totalRepairs: Number(r?.total || 0),
   }
+  } catch (error) {
+    console.error('getCustomerStats error:', error)
+    return {
+      totalCustomers: 0,
+      pending: 0,
+      repairing: 0,
+      completed: 0,
+      returned: 0,
+      totalRevenue: 0,
+      totalRepairs: 0,
+    }
+  }
 }
 
 export async function getExistingCustomers() {
+  try {
   await requireAuth()
 
   const result = await db.execute(sql`
@@ -482,6 +511,10 @@ export async function getExistingCustomers() {
   `)
 
   return result.rows as { customerName: string; phone: string }[]
+  } catch (error) {
+    console.error('getExistingCustomers error:', error)
+    return []
+  }
 }
 
 export async function getCustomerHistory(customerName: string, phone: string) {
