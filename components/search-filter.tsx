@@ -17,7 +17,7 @@ interface SearchFilterProps {
   onDateFromChange: (value: string) => void
   onDateToChange: (value: string) => void
   staffName?: string
-  staffOptions?: string[]
+  staffOptions?: { name: string; role: string }[]
   onStaffNameChange?: (value: string) => void
   showStaffFilter?: boolean
 }
@@ -106,11 +106,20 @@ export function SearchFilter({
           aria-label="Lọc theo nhân viên"
         >
           <option value="">Tất cả nhân viên</option>
-          {staffOptions.map((staff) => (
-            <option key={staff} value={staff}>
-              {staff}
-            </option>
-          ))}
+          {staffOptions.filter((s) => s.role === 'admin').length > 0 && (
+            <optgroup label="─ Admin ─">
+              {staffOptions.filter((s) => s.role === 'admin').map((s) => (
+                <option key={s.name} value={s.name}>{s.name}</option>
+              ))}
+            </optgroup>
+          )}
+          {staffOptions.filter((s) => s.role === 'staff').length > 0 && (
+            <optgroup label="─ Nhân viên ─">
+              {staffOptions.filter((s) => s.role === 'staff').map((s) => (
+                <option key={s.name} value={s.name}>{s.name}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
       )}
 

@@ -90,7 +90,7 @@ export default function AdminPage() {
   const [logsDateFrom, setLogsDateFrom] = useState('')
   const [logsDateTo, setLogsDateTo] = useState('')
   // Staff filter for reports and logs (admin only)
-  const [adminStaffOptions, setAdminStaffOptions] = useState<string[]>([])
+  const [adminStaffOptions, setAdminStaffOptions] = useState<{ name: string; role: string }[]>([])
   const [reportStaffFilter, setReportStaffFilter] = useState('')
   const [logsStaffFilter, setLogsStaffFilter] = useState('')
   // Cache flags — don't reload data when switching back to same tab
@@ -1592,11 +1592,20 @@ export default function AdminPage() {
                 >
                   <option value="">Tất cả nhân viên</option>
                   <option value="__mine__">Của tôi</option>
-                  <optgroup label="─ Nhân viên ─">
-                    {adminStaffOptions.map((s) => (
-                      <option key={s} value={s}>{s}</option>
+                  {adminStaffOptions.filter((s) => s.role === 'admin').length > 0 && (
+                  <optgroup label="─ Admin ─">
+                    {adminStaffOptions.filter((s) => s.role === 'admin').map((s) => (
+                      <option key={s.name} value={s.name}>{s.name}</option>
                     ))}
                   </optgroup>
+                  )}
+                  {adminStaffOptions.filter((s) => s.role === 'staff').length > 0 && (
+                  <optgroup label="─ Nhân viên ─">
+                    {adminStaffOptions.filter((s) => s.role === 'staff').map((s) => (
+                      <option key={s.name} value={s.name}>{s.name}</option>
+                    ))}
+                  </optgroup>
+                  )}
                 </select>
                 )}
                 <select
@@ -1773,11 +1782,20 @@ export default function AdminPage() {
                 >
                   <option value="">Tất cả nhân viên</option>
                   <option value="__mine__">Của tôi</option>
-                  <optgroup label="─ Nhân viên ─">
-                    {adminStaffOptions.map((s) => (
-                      <option key={s} value={s}>{s}</option>
+                  {adminStaffOptions.filter((s) => s.role === 'admin').length > 0 && (
+                  <optgroup label="─ Admin ─">
+                    {adminStaffOptions.filter((s) => s.role === 'admin').map((s) => (
+                      <option key={s.name} value={s.name}>{s.name}</option>
                     ))}
                   </optgroup>
+                  )}
+                  {adminStaffOptions.filter((s) => s.role === 'staff').length > 0 && (
+                  <optgroup label="─ Nhân viên ─">
+                    {adminStaffOptions.filter((s) => s.role === 'staff').map((s) => (
+                      <option key={s.name} value={s.name}>{s.name}</option>
+                    ))}
+                  </optgroup>
+                  )}
                 </select>
               )}
               {logsTotal > 0 && isAdmin && (

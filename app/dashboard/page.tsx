@@ -99,7 +99,7 @@ export default function DashboardPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [staffFilter, setStaffFilter] = useState('')
-  const [staffOptions, setStaffOptions] = useState<string[]>([])
+  const [staffOptions, setStaffOptions] = useState<{ name: string; role: string }[]>([])
   const [hideRevenue, setHideRevenue] = useState(false)
   const [viewAll, setViewAll] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -526,10 +526,17 @@ export default function DashboardPage() {
                   >
                     <option value="__mine__">Đơn của tôi</option>
                     <option value="__all__">Tất cả đơn</option>
-                    {staffOptions.length > 0 && (
+                    {staffOptions.filter((s) => s.role === 'admin' && s.name !== user?.name).length > 0 && (
+                      <optgroup label="─ Admin ─">
+                        {staffOptions.filter((s) => s.role === 'admin' && s.name !== user?.name).map((s) => (
+                          <option key={s.name} value={s.name}>{s.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {staffOptions.filter((s) => s.role === 'staff').length > 0 && (
                       <optgroup label="─ Nhân viên ─">
-                        {staffOptions.map((s) => (
-                          <option key={s} value={s}>{s}</option>
+                        {staffOptions.filter((s) => s.role === 'staff').map((s) => (
+                          <option key={s.name} value={s.name}>{s.name}</option>
                         ))}
                       </optgroup>
                     )}

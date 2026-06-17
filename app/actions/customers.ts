@@ -259,21 +259,23 @@ export async function getCustomerStaffNames(viewAll?: boolean) {
 
   if (!canViewAll) {
     // Non-admin: return only their own name
-    const [self] = await db.select({ name: user.name }).from(user).where(eq(user.id, userId))
-    return self?.name ? [self.name] : []
+    const [self] = await db.select({ name: user.name, role: user.role }).from(user).where(eq(user.id, userId))
+    return self?.name ? [{ name: self.name.trim(), role: self.role }] : []
   }
 
-  // Admin: return all active staff accounts (exclude admins)
+  // Admin: return all active accounts (staff + admins), grouped by role
   const rows = await db
-    .select({ name: user.name, id: user.id })
+    .select({ name: user.name, id: user.id, role: user.role })
     .from(user)
-    .where(and(eq(user.status, 'approved'), eq(user.role, 'staff')))
+    .where(and(eq(user.status, 'approved'), or(eq(user.role, 'staff'), eq(user.role, 'admin'))))
     .orderBy(user.name)
 
-  return rows
+  const sorted = rows
     .filter((r) => r.name?.trim())
-    .map((r) => r.name!.trim())
-    .sort((a, b) => a.localeCompare(b, 'vi', { sensitivity: 'base' }))
+    .sort((a, b) => a.name!.trim().localeCompare(b.name!.trim(), 'vi', { sensitivity: 'base' }))
+
+  // Return object with role info so UI can group them
+  return sorted.map((r) => ({ name: r.name!.trim(), role: r.role }))
 }
 
 export async function updateCustomer(
