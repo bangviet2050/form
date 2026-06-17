@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 
 /* ── Types ── */
 interface InvoiceData {
@@ -133,6 +134,7 @@ function InvoiceSheet({ data, cfg, f, shop, paper }: {
 
 /* ── Main ── */
 export default function BulkPrintClient({ invoices }: { invoices: InvoiceData[] }) {
+  const router = useRouter()
   const [paper, setPaper] = useState<PaperKey>('A5')
   const [fields, setFields] = useState<Record<FieldKey, boolean>>(DEFAULT_FIELDS)
   const [shop, setShop] = useState<ShopInfo>(DEFAULT_SHOP)
@@ -182,6 +184,16 @@ export default function BulkPrintClient({ invoices }: { invoices: InvoiceData[] 
       {/* Top bar */}
       <div className="no-print" style={{ backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button type="button" onClick={() => router.back()} style={{
+            appearance: 'none', border: '1px solid #e5e7eb', backgroundColor: '#fff',
+            color: '#374151', padding: '6px 12px', borderRadius: '8px', fontSize: '13px',
+            fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', gap: '4px',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
+            Quay lại
+          </button>
+          <span style={{ fontSize: '12px', color: '#9ca3af' }}>|</span>
           <span style={{ fontSize: '15px', fontWeight: 700 }}>In nhiều phiếu</span>
           <span style={{ fontSize: '12px', color: '#9ca3af' }}>|</span>
           <span style={{ fontSize: '13px', color: '#6b7280' }}>{invoices.length} phiếu đã chọn</span>

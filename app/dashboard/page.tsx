@@ -438,7 +438,7 @@ export default function DashboardPage() {
   }
 
   const handlePrintInvoice = (customer: Customer) => {
-    window.open(`/print/${customer.id}`, '_blank')
+    router.push(`/print/${customer.id}`)
   }
 
   const hasActiveFilters = Boolean(searchQuery.trim() || statusFilter || dateFrom || dateTo || staffFilter)
@@ -633,7 +633,7 @@ export default function DashboardPage() {
             </Button>
             {selectedIds.size > 0 && (
               <Button
-                onClick={() => window.open(`/print/bulk?ids=${Array.from(selectedIds).join(',')}`, '_blank')}
+                onClick={() => router.push(`/print/bulk?ids=${Array.from(selectedIds).join(',')}`)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2 h-9 px-4 rounded-lg shadow-sm shrink-0"
               >
                 <Printer className="h-4 w-4" />
