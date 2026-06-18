@@ -18,7 +18,8 @@ export function PrintInvoice({
   onOpenChange,
 }: PrintInvoiceProps) {
   const handlePrint = () => {
-    window.open(`/print/${customer.id}`, '_blank', 'noopener,noreferrer')
+    onOpenChange(false)
+    window.open(`/print/${customer.id}`, '_blank')
   }
 
   return (
