@@ -445,6 +445,10 @@ export default function DashboardPage() {
     setPrintOpen(true)
   }
 
+  const handlePrintXacNhan = (customer: Customer) => {
+    window.open(`/print/xacnhan/${customer.id}`, '_blank')
+  }
+
   const hasActiveFilters = Boolean(searchQuery.trim() || statusFilter || dateFrom || dateTo || staffFilter)
 
   const statCards = [
@@ -666,6 +670,7 @@ export default function DashboardPage() {
                 }}
                 onStatsRefresh={refreshStats}
                 onPrint={handlePrintInvoice}
+                onPrintXacNhan={handlePrintXacNhan}
                 onViewStatusHistory={(customer) => setStatusHistoryCustomer(customer)}
                 page={currentPage}
                 totalPages={totalPages}
