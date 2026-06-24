@@ -20,7 +20,7 @@ import { toast } from 'sonner'
 import { CustomerHistoryDialog } from '@/components/customer-history-dialog'
 import type { Customer } from '@/lib/types'
 import { getStatusLabel, getStatusColor, formatVietnamDateTime, toVietnamDate, toVietnamTime } from '@/lib/utils'
-import { Trash2, Edit, FileText, FileCheck2, History, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Clock } from 'lucide-react'
+import { Trash2, Edit, FileText, History, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Clock } from 'lucide-react'
 
 interface CustomerTableProps {
   customers: Customer[]
@@ -30,7 +30,6 @@ interface CustomerTableProps {
   onCustomersUpdate: (customers: Customer[]) => void
   onStatsRefresh: () => void
   onPrint: (customer: Customer) => void
-  onPrintXacNhan: (customer: Customer) => void
   onViewStatusHistory: (customer: Customer) => void
   page: number
   totalPages: number
@@ -57,7 +56,6 @@ export function CustomerTable({
   onCustomersUpdate,
   onStatsRefresh,
   onPrint,
-  onPrintXacNhan,
   onViewStatusHistory,
   page,
   totalPages,
@@ -887,15 +885,6 @@ export function CustomerTable({
                       aria-label="In phiếu"
                     >
                       <FileText className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onPrintXacNhan(customer)}
-                      title="Phiếu tiếp nhận"
-                      aria-label="Phiếu tiếp nhận"
-                    >
-                      <FileCheck2 className="h-4 w-4" />
                     </Button>
                     <Button
                       size="sm"

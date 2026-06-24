@@ -27,9 +27,9 @@ export default function XacNhanClient({ data }: { data: XacNhanData }) {
       display: 'flex', flexDirection: 'column',
     }}>
       <style>{`
-        @page { size: A5; margin: 6mm; }
+        @page { size: A5; margin: 5mm; }
         @media print {
-          html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; height: auto !important; overflow: hidden !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           main { background: #fff !important; padding: 0 !important; }
           .no-print { display: none !important; }
         }
@@ -60,37 +60,37 @@ export default function XacNhanClient({ data }: { data: XacNhanData }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', justifyContent: 'center' }}>
         <div style={{
           width: '100%', maxWidth: '148mm', backgroundColor: '#fff',
-          border: '1px solid #111827', boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-          padding: '6mm 8mm', boxSizing: 'border-box',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+          padding: '5mm 7mm', boxSizing: 'border-box',
         }}>
           {/* Header */}
-          <div style={{ textAlign: 'center', marginBottom: '6px' }}>
-            <p style={{ fontWeight: 700, fontSize: '12px', margin: '0 0 1px 0', textTransform: 'uppercase' }}>
+          <div style={{ textAlign: 'center', marginBottom: '5px' }}>
+            <p style={{ fontWeight: 700, fontSize: '15px', margin: '0 0 1px 0', textTransform: 'uppercase' }}>
               CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
             </p>
-            <p style={{ fontWeight: 700, fontSize: '12px', margin: '0 0 2px 0', textTransform: 'uppercase' }}>
+            <p style={{ fontWeight: 700, fontSize: '15px', margin: '0 0 2px 0', textTransform: 'uppercase' }}>
               Độc lập - Tự do - Hạnh phúc
             </p>
-            <div style={{ width: '160px', height: '1px', backgroundColor: '#111827', margin: '0 auto 4px auto' }} />
+            <div style={{ width: '160px', height: '1px', backgroundColor: '#111827', margin: '0 auto 3px auto' }} />
           </div>
 
           {/* Title */}
           <h1 style={{
-            textAlign: 'center', fontWeight: 700, fontSize: '14px',
-            margin: '0 0 2px 0', textTransform: 'uppercase', letterSpacing: '0.02em',
+            textAlign: 'center', fontWeight: 700, fontSize: '17px',
+            margin: '0 0 3px 0', textTransform: 'uppercase', letterSpacing: '0', whiteSpace: 'nowrap',
           }}>
             PHIẾU TIẾP NHẬN THIẾT BỊ VÀ ĐIỀU KHOẢN DỊCH VỤ
           </h1>
-          <p style={{ textAlign: 'center', fontSize: '11px', margin: '0 0 8px 0', color: '#333' }}>
+          <p style={{ textAlign: 'center', fontSize: '14px', margin: '0 0 8px 0', color: '#333' }}>
             Mã phiếu: <strong>{data.ticketId}</strong>
           </p>
 
           {/* Customer info */}
-          <div style={{ marginBottom: '8px' }}>
-            <p style={{ fontWeight: 700, fontSize: '11px', margin: '0 0 4px 0', textTransform: 'uppercase' }}>
+          <div style={{ marginBottom: '6px' }}>
+            <p style={{ fontWeight: 700, fontSize: '14px', margin: '0 0 4px 0', textTransform: 'uppercase' }}>
               Thông tin khách hàng:
             </p>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
               <tbody>
                 <tr>
                   <td style={{ border: '1px solid #111827', padding: '4px 6px', fontWeight: 700, width: '34%', whiteSpace: 'nowrap' }}>Họ và tên</td>
@@ -110,7 +110,7 @@ export default function XacNhanClient({ data }: { data: XacNhanData }) {
                 </tr>
                 <tr>
                   <td style={{ border: '1px solid #111827', padding: '4px 6px', fontWeight: 700, whiteSpace: 'nowrap', verticalAlign: 'top' }}>Tình trạng tiếp nhận</td>
-                  <td style={{ border: '1px solid #111827', padding: '4px 6px', minHeight: '40px', whiteSpace: 'pre-wrap' }}>
+                  <td style={{ border: '1px solid #111827', padding: '4px 6px', minHeight: '35px', whiteSpace: 'pre-wrap' }}>
                     {data.conditionBefore || '................................'}
                   </td>
                 </tr>
@@ -127,37 +127,38 @@ export default function XacNhanClient({ data }: { data: XacNhanData }) {
           </div>
 
           {/* Terms */}
-          <div style={{ marginBottom: '16px' }}>
-            <p style={{ fontWeight: 700, fontSize: '11px', margin: '0 0 3px 0', textTransform: 'uppercase' }}>
+          <div style={{ marginBottom: '6px' }}>
+            <p style={{ fontWeight: 700, fontSize: '14px', margin: '0 0 3px 0', textTransform: 'uppercase' }}>
               Điều khoản về bản quyền phần mềm
             </p>
-            <p style={{ fontSize: '10px', fontStyle: 'italic', margin: '0 0 5px 0', color: '#555' }}>
+            <p style={{ fontSize: '13px', fontStyle: 'italic', margin: '0 0 5px 0', color: '#555' }}>
               (Khách hàng vui lòng đọc kỹ trước khi ký tên)
             </p>
 
-            <p style={{ fontSize: '10px', margin: '0 0 8px 0', lineHeight: 1.8, textAlign: 'justify' }}>
+            <p style={{ fontSize: '13px', margin: '0 0 6px 0', lineHeight: 1.5, textAlign: 'justify' }}>
               Cửa hàng chỉ thực hiện dịch vụ kiểm tra, sửa chữa phần cứng và/hoặc cài đặt hệ điều hành, phần mềm ở dạng <strong>nguyên bản, chưa kích hoạt (bản dùng thử/Trial)</strong> theo đúng quy định của nhà sản xuất.
             </p>
-            <p style={{ fontSize: '10px', margin: '0 0 8px 0', lineHeight: 1.8, textAlign: 'justify' }}>
+            <p style={{ fontSize: '13px', margin: '0 0 6px 0', lineHeight: 1.5, textAlign: 'justify' }}>
               Cửa hàng <strong>TUYỆT ĐỐI KHÔNG</strong> cung cấp, cài đặt các công cụ bẻ khóa, bẻ khóa bản quyền (Crack, Patch, Keygen...) cho thiết bị.
             </p>
-            <p style={{ fontSize: '10px', margin: '0 0 8px 0', lineHeight: 1.8, textAlign: 'justify' }}>
+            <p style={{ fontSize: '13px', margin: '0 0 6px 0', lineHeight: 1.5, textAlign: 'justify' }}>
               Khách hàng có trách nhiệm tự trang bị bản quyền (License/Product Key) hợp pháp để kích hoạt và sử dụng phần mềm. Cửa hàng hoàn toàn được miễn trừ mọi trách nhiệm pháp lý liên quan đến vấn đề bản quyền phần mềm trên thiết bị của khách hàng trong và sau quá trình làm dịch vụ.
             </p>
           </div>
 
           {/* Signature */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '40px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
             <div style={{ textAlign: 'center', minWidth: '200px' }}>
-              <p style={{ fontSize: '11px', margin: '0 0 4px 0' }}>
+              <p style={{ fontSize: '14px', margin: '0 0 1px 0' }}>
                 Ngày {today}
               </p>
-              <p style={{ fontWeight: 700, fontSize: '11px', margin: '0 0 60px 0' }}>
+              <p style={{ fontWeight: 700, fontSize: '14px', margin: '0 0 1px 0' }}>
                 Xác nhận của khách hàng
               </p>
-              <p style={{ fontSize: '10px', fontStyle: 'italic', color: '#555', margin: 0 }}>
+              <p style={{ fontSize: '13px', fontStyle: 'italic', color: '#555', margin: '0 0 2px 0' }}>
                 (Ký, ghi rõ họ tên)
               </p>
+              <div style={{ height: '30px' }} />
             </div>
           </div>
         </div>

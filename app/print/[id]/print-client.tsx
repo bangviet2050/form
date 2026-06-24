@@ -11,8 +11,6 @@ interface InvoiceData {
   returnedDate: string; printedAt: string; notes: string
 }
 
-type PaperKey = 'A4' | 'A5' | 'A6' | 'A7'
-
 type FieldKey =
   | 'ticketId' | 'receivedDate' | 'customerName' | 'phone'
   | 'deviceType' | 'deviceModel' | 'accessories'
@@ -42,43 +40,22 @@ const DEFAULT_FIELDS: Record<FieldKey, boolean> = {
 interface ShopInfo { name: string; address: string; phone: string }
 
 const DEFAULT_SHOP: ShopInfo = {
-  name: 'CỬA HÀNG SỬA CHỮA ĐIỆN TỬ ABC',
-  address: '123 Đường ABC, Quận 1, TP.HCM',
-  phone: '0901 234 567',
+  name: 'CỬA HÀNG MÁY TÍNH THÀNH PHƯỚC',
+  address: 'QL30, Ấp An Lạc, Xã An Bình, H.Cao Lãnh, Đồng Tháp',
+  phone: '0979815815',
 }
 
-interface PaperTheme {
-  label: string; size: string; maxWidth: string; padding: string; margin: string
-  title: string; subtitle: string; section: string; cell: string; nameHighlight: string; footer: string
-  cellPad: string; sectionGap: number; signatureHeight: number; labelW: string
-}
-
-const THEMES: Record<PaperKey, PaperTheme> = {
-  A4: {
-    label: 'A4', size: 'A4', maxWidth: '210mm', padding: '12mm 14mm', margin: '10mm',
-    title: '22px', subtitle: '13px', section: '14px', cell: '13px', nameHighlight: '20px', footer: '10px',
-    cellPad: '7px 10px', sectionGap: 12, signatureHeight: 56, labelW: '28%',
-  },
-  A5: {
-    label: 'A5', size: 'A5', maxWidth: '148mm', padding: '8mm 10mm', margin: '7mm',
-    title: '15px', subtitle: '9px', section: '10px', cell: '9px', nameHighlight: '14px', footer: '7px',
-    cellPad: '5px 7px', sectionGap: 8, signatureHeight: 39, labelW: '29%',
-  },
-  A6: {
-    label: 'A6', size: 'A6', maxWidth: '105mm', padding: '6mm 7mm', margin: '5mm',
-    title: '11px', subtitle: '7px', section: '7px', cell: '7px', nameHighlight: '10px', footer: '5px',
-    cellPad: '3px 5px', sectionGap: 6, signatureHeight: 28, labelW: '31%',
-  },
-  A7: {
-    label: 'A7', size: 'A7', maxWidth: '74mm', padding: '4mm 5mm', margin: '4mm',
-    title: '8px', subtitle: '5px', section: '5px', cell: '5px', nameHighlight: '8px', footer: '4px',
-    cellPad: '2px 3px', sectionGap: 4, signatureHeight: 20, labelW: '33%',
-  },
+/* ── A5 Theme ── */
+const A5 = {
+  size: 'A5', maxWidth: '148mm', padding: '5mm 7mm', margin: '5mm',
+  title: '18px', subtitle: '12px', section: '13px', cell: '12px',
+  nameHighlight: '16px', footer: '10px',
+  cellPad: '4px 6px', gap: 5, sigH: 40, labelW: '30%',
 }
 
 /* ── localStorage ── */
-const STORAGE_KEY = 'print-settings'
-interface PrintSettings { paper: PaperKey; fields: Record<FieldKey, boolean>; shop: ShopInfo }
+const STORAGE_KEY = 'print-settings-v2'
+interface PrintSettings { fields: Record<FieldKey, boolean>; shop: ShopInfo }
 function loadSettings(): PrintSettings | null {
   if (typeof window === 'undefined') return null
   try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null } catch { return null }
@@ -89,22 +66,22 @@ function saveSettings(s: PrintSettings) {
 }
 
 /* ── Sub-components ── */
-function Row({ cfg, label, children, highlight }: {
-  cfg: PaperTheme; label: string; children: React.ReactNode; highlight?: boolean
+function Row({ label, children, highlight }: {
+  label: string; children: React.ReactNode; highlight?: boolean
 }) {
-  const s = { border: '1px solid #111827', padding: cfg.cellPad, lineHeight: 1.35, wordBreak: 'break-word' as const, verticalAlign: 'top' as const }
+  const s = { border: '1px solid #111827', padding: A5.cellPad, lineHeight: 1.35, wordBreak: 'break-word' as const, verticalAlign: 'top' as const }
   return (
     <tr>
-      <td style={{ ...s, fontWeight: 700, width: cfg.labelW, whiteSpace: 'nowrap' as const }}>{label}</td>
+      <td style={{ ...s, fontWeight: 700, width: A5.labelW, whiteSpace: 'nowrap' as const }}>{label}</td>
       <td className={highlight ? 'print-name' : undefined} style={{ ...s, fontWeight: highlight ? 700 : 400, letterSpacing: highlight ? '0.01em' : undefined }}>{children}</td>
     </tr>
   )
 }
 
-function Section({ cfg, title, children }: { cfg: PaperTheme; title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginTop: cfg.sectionGap }}>
-      <p className="print-section" style={{ fontWeight: 700, margin: `0 0 ${cfg.sectionGap / 2}px 0`, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{title}</p>
+    <div style={{ marginTop: A5.gap }}>
+      <p className="print-section" style={{ fontWeight: 700, margin: '0 0 3px 0', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{title}</p>
       {children}
     </div>
   )
@@ -132,7 +109,6 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   )
 }
 
-/* ── Sidebar section ── */
 function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: '20px' }}>
@@ -144,7 +120,6 @@ function SidebarSection({ title, children }: { title: string; children: React.Re
 
 /* ── Main ── */
 export default function PrintClient({ data }: { data: InvoiceData }) {
-  const [paper, setPaper] = useState<PaperKey>('A5')
   const [fields, setFields] = useState<Record<FieldKey, boolean>>(DEFAULT_FIELDS)
   const [shop, setShop] = useState<ShopInfo>(DEFAULT_SHOP)
   const [loaded, setLoaded] = useState(false)
@@ -154,7 +129,6 @@ export default function PrintClient({ data }: { data: InvoiceData }) {
   useEffect(() => {
     const saved = loadSettings()
     if (saved) {
-      setPaper(saved.paper)
       setFields({ ...DEFAULT_FIELDS, ...saved.fields })
       setShop({ ...DEFAULT_SHOP, ...saved.shop })
     }
@@ -163,12 +137,10 @@ export default function PrintClient({ data }: { data: InvoiceData }) {
 
   useEffect(() => {
     if (!loaded) return
-    saveSettings({ paper, fields, shop })
-  }, [paper, fields, shop, loaded])
+    saveSettings({ fields, shop })
+  }, [fields, shop, loaded])
 
-  const cfg = THEMES[paper]
   const f = fields
-
   const toggleField = (key: FieldKey) => setFields(prev => ({ ...prev, [key]: !prev[key] }))
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -192,21 +164,23 @@ export default function PrintClient({ data }: { data: InvoiceData }) {
       boxSizing: 'border-box', fontFamily: '"Times New Roman", Times, serif', color: '#111827',
       display: 'flex', flexDirection: 'column',
     }}>
-      <style key={`print-${paper}`}>{`
-        @page { size: ${cfg.size}; margin: ${cfg.margin}; }
+      <style>{`
+        @page { size: A5; margin: 5mm; }
         .print-sheet table, .print-sheet td, .print-sheet th,
         .print-sheet p, .print-sheet div, .print-sheet span {
-          font-size: ${cfg.cell} !important; line-height: 1.35;
+          font-size: 12px !important; line-height: 1.35;
         }
-        .print-sheet .print-title { font-size: ${cfg.title} !important; }
-        .print-sheet .print-subtitle { font-size: ${cfg.subtitle} !important; }
-        .print-sheet .print-section { font-size: ${cfg.section} !important; }
-        .print-sheet .print-name { font-size: ${cfg.nameHighlight} !important; }
-        .print-sheet .print-footer { font-size: ${cfg.footer} !important; }
+        .print-sheet .print-title { font-size: 18px !important; }
+        .print-sheet .print-subtitle { font-size: 12px !important; }
+        .print-sheet .print-section { font-size: 14px !important; }
+        .print-sheet .print-name { font-size: 16px !important; }
+        .print-sheet .print-cost { font-size: 16px !important; }
+        .print-sheet .print-footer { font-size: 10px !important; }
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           main { background: #fff !important; padding: 0 !important; }
-          .print-shell { padding: 0 !important; }
+          main * { background: #fff !important; }
+          .print-shell { padding: 0 !important; transform: none !important; }
           .print-sheet { width: auto !important; max-width: none !important; margin: 0 !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
           .no-print { display: none !important; }
           .avoid-break { break-inside: avoid; page-break-inside: avoid; }
@@ -242,21 +216,6 @@ export default function PrintClient({ data }: { data: InvoiceData }) {
           width: '320px', minWidth: '320px', backgroundColor: '#fff',
           borderRight: '1px solid #e5e7eb', overflowY: 'auto', padding: '20px',
         }}>
-
-          {/* Paper size */}
-          <SidebarSection title="Khổ giấy">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px' }}>
-              {(['A4', 'A5', 'A6', 'A7'] as PaperKey[]).map(k => (
-                <button key={k} type="button" onClick={() => setPaper(k)} style={{
-                  appearance: 'none', border: `2px solid ${paper === k ? '#2563eb' : '#e5e7eb'}`,
-                  backgroundColor: paper === k ? '#eff6ff' : '#fff',
-                  color: paper === k ? '#2563eb' : '#374151',
-                  padding: '8px 0', borderRadius: '8px', fontSize: '14px', fontWeight: 700,
-                  cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
-                }}>{k}</button>
-              ))}
-            </div>
-          </SidebarSection>
 
           {/* Shop info */}
           <SidebarSection title="Thông tin cửa hàng">
@@ -312,17 +271,17 @@ export default function PrintClient({ data }: { data: InvoiceData }) {
           </div>
 
           <div className="print-shell" style={{ display: 'flex', justifyContent: 'center', transformOrigin: 'top center', transform: `scale(${zoom})` }}>
-            <div key={`sheet-${paper}`} className="print-sheet" style={{
-              width: '100%', maxWidth: cfg.maxWidth,
+            <div className="print-sheet" style={{
+              width: '100%', maxWidth: A5.maxWidth,
               backgroundColor: '#ffffff', border: '1px solid #111827',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: cfg.padding,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: A5.padding,
               boxSizing: 'border-box',
             }}>
 
               {/* HEADER */}
-              <div style={{ textAlign: 'center', marginBottom: cfg.sectionGap }}>
+              <div style={{ textAlign: 'center', marginBottom: A5.gap }}>
                 {f.shopInfo && (
-                  <div style={{ marginBottom: '4px' }}>
+                  <div style={{ marginBottom: '3px' }}>
                     <p className="print-subtitle" style={{ fontWeight: 700, margin: '0 0 1px 0' }}>{shop.name}</p>
                     <p style={{ margin: '0 0 1px 0', color: '#555' }}>{shop.address}</p>
                     <p style={{ margin: 0, color: '#555' }}>ĐT: {shop.phone}</p>
@@ -333,174 +292,73 @@ export default function PrintClient({ data }: { data: InvoiceData }) {
                 </div>
               </div>
 
-              {/* A4/A5 */}
-              {(paper === 'A4' || paper === 'A5') && (
-                <>
+              {/* Thông tin chung */}
+              <Tbl><tbody>
+                {f.ticketId && <Row label="Mã phiếu">{data.ticketId}</Row>}
+                {f.receivedDate && <Row label="Ngày nhận">{data.receivedDate}</Row>}
+                {f.customerName && <Row label="Khách hàng" highlight>{data.customerName}</Row>}
+                {f.phone && <Row label="Số điện thoại">{data.phone}</Row>}
+              </tbody></Tbl>
+
+              {/* Thiết bị */}
+              <Section title="Thông tin thiết bị">
+                <Tbl><tbody>
+                  {f.deviceType && <Row label="Hiệu máy">{data.deviceType}</Row>}
+                  {f.deviceModel && <Row label="Model">{data.deviceModel}</Row>}
+                  {f.accessories && <Row label="Phụ kiện">{data.accessories}</Row>}
+                </tbody></Tbl>
+              </Section>
+
+              {/* Sửa chữa */}
+              <Section title="Thông tin sửa chữa">
+                <Tbl><tbody>
+                  {f.conditionBefore && <Row label="Trước khi sửa">{data.conditionBefore}</Row>}
+                  {f.conditionAfter && <Row label="Sau khi sửa">{data.conditionAfter}</Row>}
+                  {f.repairCost && <tr>
+                    <td style={{ border: '1px solid #111827', padding: A5.cellPad, fontWeight: 700, width: A5.labelW, whiteSpace: 'nowrap' }}>Giá sửa</td>
+                    <td className="print-cost" style={{ border: '1px solid #111827', padding: A5.cellPad, fontWeight: 700, color: '#b91c1c' }}>{data.repairCost}</td>
+                  </tr>}
+                </tbody></Tbl>
+              </Section>
+
+              {/* Nhân sự & Bàn giao */}
+              <Section title="Nhân sự & Bàn giao">
+                <Tbl><tbody>
+                  {f.receivedBy && <Row label="Người nhận">{data.receivedBy}</Row>}
+                  {f.repairedBy && <Row label="Người sửa">{data.repairedBy}</Row>}
+                  {f.status && <Row label="Trạng thái">{data.status}</Row>}
+                  {f.returnedDate && <Row label="Ngày trả">{data.returnedDate}</Row>}
+                  {f.printedAt && <Row label="Ngày in">{data.printedAt}</Row>}
+                </tbody></Tbl>
+              </Section>
+
+              {/* Ghi chú */}
+              {f.notes && (
+                <Section title="Ghi chú">
                   <Tbl><tbody>
                     <tr>
-                      {f.ticketId && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>Mã phiếu</td>
-                      <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.ticketId}</td></>}
-                      {f.receivedDate && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>Ngày nhận</td>
-                      <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.receivedDate}</td></>}
+                      <td style={{ border: '1px solid #111827', padding: A5.cellPad, minHeight: '25px', whiteSpace: 'pre-wrap', lineHeight: 1.35 }}>
+                        {data.notes || '..........................................................................'}
+                      </td>
                     </tr>
-                    {f.customerName && <tr>
-                      <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>Khách hàng</td>
-                      <td className="print-name" style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, letterSpacing: '0.01em' }}>{data.customerName}</td>
-                      {f.phone && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%', whiteSpace: 'nowrap' }}>SĐT</td>
-                      <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.phone}</td></>}
-                    </tr>}
                   </tbody></Tbl>
-
-                  <div style={{ display: 'flex', gap: cfg.sectionGap, marginTop: cfg.sectionGap }} className="avoid-break">
-                    <div style={{ flex: 1 }}>
-                      <Section cfg={cfg} title="Thiết bị">
-                        <Tbl><tbody>
-                          {f.deviceType && <Row cfg={cfg} label="Hiệu máy">{data.deviceType}</Row>}
-                          {f.deviceModel && <Row cfg={cfg} label="Model">{data.deviceModel}</Row>}
-                          {f.accessories && <Row cfg={cfg} label="Phụ kiện">{data.accessories}</Row>}
-                        </tbody></Tbl>
-                      </Section>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <Section cfg={cfg} title="Sửa chữa">
-                        <Tbl><tbody>
-                          {f.conditionBefore && <Row cfg={cfg} label="Trước sửa">{data.conditionBefore}</Row>}
-                          {f.conditionAfter && <Row cfg={cfg} label="Sau sửa">{data.conditionAfter}</Row>}
-                          {f.repairCost && <tr>
-                            <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: cfg.labelW, whiteSpace: 'nowrap' }}>Giá sửa</td>
-                            <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>{data.repairCost}</td>
-                          </tr>}
-                        </tbody></Tbl>
-                      </Section>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: cfg.sectionGap, marginTop: cfg.sectionGap }} className="avoid-break">
-                    <div style={{ flex: 1 }}>
-                      <Section cfg={cfg} title="Nhân sự">
-                        <Tbl><tbody>
-                          {f.receivedBy && <Row cfg={cfg} label="Người nhận">{data.receivedBy}</Row>}
-                          {f.repairedBy && <Row cfg={cfg} label="Người sửa">{data.repairedBy}</Row>}
-                          {f.status && <Row cfg={cfg} label="Trạng thái">{data.status}</Row>}
-                        </tbody></Tbl>
-                      </Section>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <Section cfg={cfg} title="Bàn giao">
-                        <Tbl><tbody>
-                          {f.returnedDate && <Row cfg={cfg} label="Ngày trả">{data.returnedDate}</Row>}
-                          {f.printedAt && <Row cfg={cfg} label="Ngày in">{data.printedAt}</Row>}
-                        </tbody></Tbl>
-                      </Section>
-                    </div>
-                  </div>
-
-                  {f.notes && (
-                    <Section cfg={cfg} title="Ghi chú">
-                      <Tbl><tbody>
-                        <tr>
-                          <td style={{ border: '1px solid #111827', padding: cfg.cellPad, minHeight: '30px', whiteSpace: 'pre-wrap', lineHeight: 1.35 }}>
-                            {data.notes || '..........................................................................'}
-                          </td>
-                        </tr>
-                      </tbody></Tbl>
-                    </Section>
-                  )}
-                </>
-              )}
-
-              {/* A6 */}
-              {paper === 'A6' && (
-                <Tbl><tbody>
-                  {f.ticketId && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%' }}>Mã phiếu</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.ticketId}</td>
-                    {f.receivedDate && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: '22%' }}>Ngày nhận</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.receivedDate}</td></>}
-                  </tr>}
-                  {f.customerName && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Khách hàng</td>
-                    <td className="print-name" style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.customerName}</td>
-                    {f.phone && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>SĐT</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.phone}</td></>}
-                  </tr>}
-                  {f.deviceType && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Hiệu máy</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceType}</td>
-                    {f.deviceModel && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Model</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceModel}</td></>}
-                  </tr>}
-                  {f.conditionBefore && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trước sửa</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.conditionBefore}</td>
-                    {f.repairCost && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>Giá sửa</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>{data.repairCost}</td></>}
-                  </tr>}
-                  {f.status && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trạng thái</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.status}</td>
-                    {f.returnedDate && <><td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Ngày trả</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.returnedDate}</td></>}
-                  </tr>}
-                </tbody></Tbl>
-              )}
-
-              {/* A7 */}
-              {paper === 'A7' && (
-                <Tbl><tbody>
-                  {f.ticketId && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, width: cfg.labelW, whiteSpace: 'nowrap' }}>Mã</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.ticketId}</td>
-                  </tr>}
-                  {f.customerName && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Khách</td>
-                    <td className="print-name" style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.customerName}</td>
-                  </tr>}
-                  {f.phone && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>SĐT</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.phone}</td>
-                  </tr>}
-                  {f.deviceType && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Hiệu</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceType}</td>
-                  </tr>}
-                  {f.deviceModel && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Model</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.deviceModel}</td>
-                  </tr>}
-                  {f.conditionBefore && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trước sửa</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.conditionBefore}</td>
-                  </tr>}
-                  {f.repairCost && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>Giá sửa</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700, color: '#b91c1c' }}>{data.repairCost}</td>
-                  </tr>}
-                  {f.status && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Trạng thái</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>{data.status}</td>
-                  </tr>}
-                  {f.returnedDate && <tr>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad, fontWeight: 700 }}>Ngày trả</td>
-                    <td style={{ border: '1px solid #111827', padding: cfg.cellPad }}>{data.returnedDate}</td>
-                  </tr>}
-                </tbody></Tbl>
+                </Section>
               )}
 
               {/* CHỮ KÝ */}
               {f.signature && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: cfg.sectionGap, gap: cfg.sectionGap }} className="avoid-break">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: A5.gap, gap: A5.gap }} className="avoid-break">
                   <div style={{ flex: 1, textAlign: 'center' }}>
-                    <div style={{ marginTop: cfg.signatureHeight, borderTop: '1px solid #111827', paddingTop: '2px', fontWeight: 700 }}>Người nhận</div>
+                    <div style={{ marginTop: A5.sigH, borderTop: '1px solid #111827', paddingTop: '2px', fontWeight: 700 }}>Người nhận</div>
                   </div>
                   <div style={{ flex: 1, textAlign: 'center' }}>
-                    <div style={{ marginTop: cfg.signatureHeight, borderTop: '1px solid #111827', paddingTop: '2px', fontWeight: 700 }}>Người giao</div>
+                    <div style={{ marginTop: A5.sigH, borderTop: '1px solid #111827', paddingTop: '2px', fontWeight: 700 }}>Người giao</div>
                   </div>
                 </div>
               )}
 
               {/* FOOTER */}
-              <div className="print-footer" style={{ marginTop: cfg.sectionGap, display: 'flex', justifyContent: 'space-between', fontStyle: 'italic', color: '#999' }}>
+              <div className="print-footer" style={{ marginTop: A5.gap, display: 'flex', justifyContent: 'space-between', fontStyle: 'italic', color: '#999' }}>
                 <span>In lúc: {data.printedAt}</span>
                 <span>Phiếu sửa chữa</span>
               </div>
